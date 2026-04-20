@@ -1,0 +1,13 @@
+[package]
+name = "luksruntime"
+version = "0.1.0"
+edition = "2021"
+license = { workspace = true }
+repository = { workspace = true }
+
+[lib]
+name = "luksruntime"
+crate-type = ["cdylib"]
+
+[dependencies]
+mlua = { version = "0.11", features = ["luau", "vendored"] }
