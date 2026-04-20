@@ -1,0 +1,19 @@
+[workspace]
+members = [
+    "crates/luksruntime",
+    "crates/lukscli",
+    "tests/dlopen/source",
+]
+resolver = "2"
+
+[workspace.package]
+version = "0.1.0"
+license = "MIT"
+repository = "https://github.com/luks-luau/luks"
+
+[profile.release]
+opt-level = "z"
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+strip = true
