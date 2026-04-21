@@ -24,7 +24,7 @@ fn normalize_path(path: &std::path::Path) -> PathBuf {
     result
 }
 
-pub mod require;
+pub mod luau_require;
 pub mod utils;
 pub mod loader;
 
@@ -133,9 +133,39 @@ fn register_dlopen(lua: &Lua) -> LuaResult<()> {
 pub unsafe extern "C-unwind" fn luks_new() -> *mut LuksRuntime {
     let lua = unsafe { Lua::unsafe_new() };
 
-    if let Err(e) = require::init_require(&lua) {
-        eprintln!("init_require falhou: {}", e);
-        return ptr::null_mut();
+    // Configura o require nativo do Luau usando nosso trait Require
+    let requirer = luau_require::LuksRequirer::new();
+    let luau_require_fn = match lua.create_require_function(requirer) {
+        Ok(f) => f,
+        Err(e) => {
+            eprintln!("create_require_function falhou: {}", e);
+            return ptr::null_mut();
+        }
+    };
+    
+    // Cria wrapper que adiciona ./ a caminhos sem prefixo válido
+    // Isso mantém compatibilidade com código que faz require("modulo") em vez de require("./modulo")
+    let require_wrapper = lua.create_function(move |_lua, module: String| -> mlua::Result<mlua::Value> {
+        let adjusted_path = if module.starts_with("./") || module.starts_with("../") || module.starts_with("@") {
+            module
+        } else {
+            // Adiciona ./ para caminhos sem prefixo (relativo ao diretório do script)
+            format!("./{}", module)
+        };
+        luau_require_fn.call::<mlua::Value>(adjusted_path)
+    });
+    
+    match require_wrapper {
+        Ok(f) => {
+            if let Err(e) = lua.globals().set("require", f) {
+                eprintln!("falha ao registrar require: {}", e);
+                return ptr::null_mut();
+            }
+        }
+        Err(e) => {
+            eprintln!("falha ao criar require wrapper: {}", e);
+            return ptr::null_mut();
+        }
     }
 
     // Registra dlopen
