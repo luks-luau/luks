@@ -11,3 +11,4 @@ crate-type = ["cdylib"]
 
 [dependencies]
 mlua = { version = "0.11", features = ["luau", "vendored"] }
+libloading = "0.9"
