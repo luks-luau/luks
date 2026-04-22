@@ -23,7 +23,15 @@ pub fn system_library_paths() -> Vec<PathBuf> {
         if env::var_os("LUKS_DLOPEN_SEARCH_PATH").is_some() {
             if let Ok(path_var) = env::var("PATH") {
                 for dir in path_var.split(';') {
-                    paths.push(PathBuf::from(dir));
+                    let dir = dir.trim();
+                    if dir.is_empty() {
+                        continue;
+                    }
+                    let p = PathBuf::from(dir);
+                    if !p.is_absolute() {
+                        continue;
+                    }
+                    paths.push(p);
                 }
             }
         }
@@ -43,24 +51,26 @@ pub fn system_library_paths() -> Vec<PathBuf> {
         paths.push(PathBuf::from("/lib"));
 
         // Multiarch support (x86_64-linux-gnu, etc)
-        static MULTIARCH: LazyLock<Option<String>> = LazyLock::new(|| {
-            std::process::Command::new("dpkg-architecture")
-                .arg("-qDEB_HOST_MULTIARCH")
-                .output()
-                .ok()
-                .and_then(|out| {
-                    let s = String::from_utf8_lossy(&out.stdout).trim().to_string();
-                    if s.is_empty() {
-                        None
-                    } else {
-                        Some(s)
-                    }
-                })
-        });
-        if let Some(arch_str) = MULTIARCH.as_deref() {
-            paths.push(PathBuf::from(format!("/usr/local/lib/{}", arch_str)));
-            paths.push(PathBuf::from(format!("/usr/lib/{}", arch_str)));
-            paths.push(PathBuf::from(format!("/lib/{}", arch_str)));
+        if env::var_os("LUKS_DLOPEN_LINUX_MULTIARCH").is_some() {
+            static MULTIARCH: LazyLock<Option<String>> = LazyLock::new(|| {
+                std::process::Command::new("dpkg-architecture")
+                    .arg("-qDEB_HOST_MULTIARCH")
+                    .output()
+                    .ok()
+                    .and_then(|out| {
+                        let s = String::from_utf8_lossy(&out.stdout).trim().to_string();
+                        if s.is_empty() {
+                            None
+                        } else {
+                            Some(s)
+                        }
+                    })
+            });
+            if let Some(arch_str) = MULTIARCH.as_deref() {
+                paths.push(PathBuf::from(format!("/usr/local/lib/{}", arch_str)));
+                paths.push(PathBuf::from(format!("/usr/lib/{}", arch_str)));
+                paths.push(PathBuf::from(format!("/lib/{}", arch_str)));
+            }
         }
     }
 
