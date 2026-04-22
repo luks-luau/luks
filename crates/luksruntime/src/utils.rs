@@ -19,7 +19,7 @@ pub fn resolve_path(lua: &Lua, input: &str) -> PathBuf {
         .or_else(|| std::env::current_dir().ok())
         .unwrap_or_else(|| PathBuf::from("."));
 
-    if let Some(rest) = input.strip_prefix("@self/") {
+    if let Some(rest) = input.strip_prefix("@self/").or_else(|| input.strip_prefix("@self\\")) {
         return base.join(rest);
     }
     if input == "@self" {
@@ -27,7 +27,7 @@ pub fn resolve_path(lua: &Lua, input: &str) -> PathBuf {
     }
 
     let p = Path::new(input);
-    if input.starts_with("./") || input.starts_with("../") {
+    if input.starts_with("./") || input.starts_with("../") || input.starts_with(".\\") || input.starts_with("..\\") {
         base.join(p)
     } else if p.is_absolute() {
         p.to_path_buf()
