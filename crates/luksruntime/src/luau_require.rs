@@ -14,6 +14,7 @@ pub struct LuksRequirer {
     current_path: PathBuf,
     /// Diretório do script que está fazendo require (de __script_dir__)
     script_dir: PathBuf,
+    require_paths: Vec<PathBuf>,
 }
 
 impl LuksRequirer {
@@ -21,6 +22,17 @@ impl LuksRequirer {
         Self {
             current_path: PathBuf::from("."),
             script_dir: PathBuf::from("."),
+            require_paths: std::env::var("LUKS_REQUIRE_PATH")
+                .ok()
+                .map(|v| {
+                    let separator = if cfg!(windows) { ';' } else { ':' };
+                    v.split(separator)
+                        .map(str::trim)
+                        .filter(|s| !s.is_empty())
+                        .map(PathBuf::from)
+                        .collect::<Vec<_>>()
+                })
+                .unwrap_or_default(),
         }
     }
 
@@ -37,11 +49,37 @@ impl LuksRequirer {
             }
         }
 
+        if !self.require_paths.is_empty() {
+            if let Ok(rel) = base.strip_prefix(&self.script_dir) {
+                for root in &self.require_paths {
+                    for ext in ["luau", "lua"] {
+                        let with_ext = root.join(rel).with_extension(ext);
+                        if with_ext.is_file() {
+                            return Some(with_ext);
+                        }
+                    }
+                }
+            }
+        }
+
         // Tenta init.luau ou init.lua no diretório
         for ext in ["luau", "lua"] {
             let init = base.join(format!("init.{}", ext));
             if init.is_file() {
                 return Some(init);
+            }
+        }
+
+        if !self.require_paths.is_empty() {
+            if let Ok(rel) = base.strip_prefix(&self.script_dir) {
+                for root in &self.require_paths {
+                    for ext in ["luau", "lua"] {
+                        let init = root.join(rel).join(format!("init.{}", ext));
+                        if init.is_file() {
+                            return Some(init);
+                        }
+                    }
+                }
             }
         }
 
