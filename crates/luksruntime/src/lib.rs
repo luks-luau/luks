@@ -264,11 +264,25 @@ pub unsafe extern "C-unwind" fn luks_execute(
         return CString::new("runtime ou source nulo").unwrap().into_raw();
     }
     let rt = &mut *rt;
-    let src = CStr::from_ptr(source).to_str().unwrap_or("");
+    let src = match CStr::from_ptr(source).to_str() {
+        Ok(s) => s,
+        Err(e) => {
+            return CString::new(format!("source inválido (utf-8): {}", e))
+                .unwrap_or_else(|_| CString::new("source inválido").unwrap())
+                .into_raw();
+        }
+    };
     let name_str = if chunk_name.is_null() {
         "luks_chunk"
     } else {
-        CStr::from_ptr(chunk_name).to_str().unwrap_or("luks_chunk")
+        match CStr::from_ptr(chunk_name).to_str() {
+            Ok(s) => s,
+            Err(e) => {
+                return CString::new(format!("chunk_name inválido (utf-8): {}", e))
+                    .unwrap_or_else(|_| CString::new("chunk_name inválido").unwrap())
+                    .into_raw();
+            }
+        }
     };
 
     // Define __script_dir__ para @self/ funcionar corretamente
@@ -291,6 +305,16 @@ pub unsafe extern "C-unwind" fn luks_execute(
 pub unsafe extern "C-unwind" fn luks_free_error(err: *mut i8) {
     if !err.is_null() {
         drop(CString::from_raw(err));
+    }
+}
+
+#[no_mangle]
+pub unsafe extern "C-unwind" fn luks_clear_loaded_libs() -> *mut i8 {
+    match loader::clear_loaded_libs() {
+        Ok(()) => ptr::null_mut(),
+        Err(e) => CString::new(e)
+            .unwrap_or_else(|_| CString::new("erro").unwrap())
+            .into_raw(),
     }
 }
 
