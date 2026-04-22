@@ -1,5 +1,5 @@
 // Cache simplificado - por enquanto apenas placeholder
-// A biblioteca é mantida viva via Box::leak em platform.rs
+// A biblioteca é mantida viva em memória via lista global em platform.rs
 // Futuramente pode-se implementar contagem de referências
 
 pub struct ModuleCache;
