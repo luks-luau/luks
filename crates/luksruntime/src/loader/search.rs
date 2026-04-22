@@ -1,6 +1,9 @@
 use std::env;
 use std::path::PathBuf;
 
+#[cfg(target_os = "linux")]
+use std::sync::LazyLock;
+
 /// Retorna as pastas de biblioteca do sistema para a plataforma atual
 pub fn system_library_paths() -> Vec<PathBuf> {
     let mut paths = Vec::new();
@@ -15,10 +18,13 @@ pub fn system_library_paths() -> Vec<PathBuf> {
                 paths.push(PathBuf::from(&system_root).join("SysWOW64"));
             }
         }
-        // Também procura no PATH
-        if let Ok(path_var) = env::var("PATH") {
-            for dir in path_var.split(';') {
-                paths.push(PathBuf::from(dir));
+        // PATH pode ser perigoso para resolução implícita de DLLs.
+        // Só habilita se o usuário optar explicitamente.
+        if env::var_os("LUKS_DLOPEN_SEARCH_PATH").is_some() {
+            if let Ok(path_var) = env::var("PATH") {
+                for dir in path_var.split(';') {
+                    paths.push(PathBuf::from(dir));
+                }
             }
         }
     }
@@ -35,18 +41,26 @@ pub fn system_library_paths() -> Vec<PathBuf> {
         paths.push(PathBuf::from("/usr/local/lib"));
         paths.push(PathBuf::from("/usr/lib"));
         paths.push(PathBuf::from("/lib"));
-        
+
         // Multiarch support (x86_64-linux-gnu, etc)
-        if let Ok(arch) = std::process::Command::new("dpkg-architecture")
-            .arg("-qDEB_HOST_MULTIARCH")
-            .output()
-        {
-            let arch_str = String::from_utf8_lossy(&arch.stdout).trim().to_string();
-            if !arch_str.is_empty() {
-                paths.push(PathBuf::from(format!("/usr/local/lib/{}", arch_str)));
-                paths.push(PathBuf::from(format!("/usr/lib/{}", arch_str)));
-                paths.push(PathBuf::from(format!("/lib/{}", arch_str)));
-            }
+        static MULTIARCH: LazyLock<Option<String>> = LazyLock::new(|| {
+            std::process::Command::new("dpkg-architecture")
+                .arg("-qDEB_HOST_MULTIARCH")
+                .output()
+                .ok()
+                .and_then(|out| {
+                    let s = String::from_utf8_lossy(&out.stdout).trim().to_string();
+                    if s.is_empty() {
+                        None
+                    } else {
+                        Some(s)
+                    }
+                })
+        });
+        if let Some(arch_str) = MULTIARCH.as_deref() {
+            paths.push(PathBuf::from(format!("/usr/local/lib/{}", arch_str)));
+            paths.push(PathBuf::from(format!("/usr/lib/{}", arch_str)));
+            paths.push(PathBuf::from(format!("/lib/{}", arch_str)));
         }
     }
 
@@ -92,13 +106,12 @@ pub fn system_library_paths() -> Vec<PathBuf> {
 }
 
 /// Tenta encontrar uma biblioteca pelo nome
-/// 
+///
 /// Ordem de busca:
-/// 1. Se tiver path separators (/ ou \), usa como caminho relativo
-/// 2. Tenta no diretório do script
-/// 3. Tenta no diretório do executável
-/// 4. Tenta nas pastas de sistema
-/// 
+/// 1. Se tiver path separators (/ ou \), não resolve aqui (o caller decide)
+/// 2. Tenta no diretório do executável
+/// 3. Tenta nas pastas de sistema
+///
 /// Retorna None se não encontrar
 pub fn find_library(name: &str) -> Option<PathBuf> {
     // Se tem separadores de path, é um caminho relativo ou absoluto
@@ -108,7 +121,17 @@ pub fn find_library(name: &str) -> Option<PathBuf> {
 
     // Monta os possíveis nomes de arquivo
     let names = library_file_names(name);
-    
+
+    // Tenta no diretório do executável (útil p/ apps empacotados)
+    if let Some(exe_dir) = executable_dir() {
+        for lib_name in &names {
+            let full_path = exe_dir.join(lib_name);
+            if full_path.exists() {
+                return Some(full_path);
+            }
+        }
+    }
+
     // Busca em todas as pastas do sistema
     for dir in system_library_paths() {
         for lib_name in &names {
@@ -123,13 +146,13 @@ pub fn find_library(name: &str) -> Option<PathBuf> {
 }
 
 /// Retorna os possíveis nomes de arquivo para a biblioteca
-/// 
+///
 /// Exemplo: "testmodule" → ["testmodule.dll", "libtestmodule.so", "libtestmodule.dylib"]
 fn library_file_names(name: &str) -> Vec<String> {
     let mut names = Vec::new();
-    
+
     // Se já tem extensão, usa só ele
-    if name.contains('.') {
+    if std::path::Path::new(name).extension().is_some() {
         names.push(name.to_string());
         return names;
     }
@@ -139,18 +162,28 @@ fn library_file_names(name: &str) -> Vec<String> {
         names.push(format!("{}.dll", name));
     }
 
-    #[cfg(not(windows))]
+    #[cfg(target_os = "linux")]
     {
-        // No Unix, tenta com prefixo 'lib'
+        // Linux: .so
         if name.starts_with("lib") {
             names.push(format!("{}.so", name));
-            names.push(format!("{}.dylib", name));
         } else {
             names.push(format!("lib{}.so", name));
-            names.push(format!("lib{}.dylib", name));
         }
         // Também tenta sem prefixo (alguns sistemas)
         names.push(format!("{}.so", name));
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        // macOS: .dylib
+        if name.starts_with("lib") {
+            names.push(format!("{}.dylib", name));
+        } else {
+            names.push(format!("lib{}.dylib", name));
+        }
+        // Também tenta sem prefixo
+        names.push(format!("{}.dylib", name));
     }
 
     names
@@ -171,7 +204,7 @@ mod tests {
     fn test_library_file_names() {
         let names = library_file_names("test");
         assert!(names.iter().any(|n| n.contains("test")));
-        
+
         // Com extensão deve retornar só ela
         let names_ext = library_file_names("test.dll");
         assert_eq!(names_ext.len(), 1);
