@@ -3,7 +3,7 @@ mod platform;
 pub mod search;
 
 pub use platform::LuauExport;
-pub use search::{find_library, system_library_paths, executable_dir};
+pub use search::{executable_dir, find_library, system_library_paths};
 
 use cache::ModuleCache;
 use platform::load_export;
@@ -24,7 +24,7 @@ impl ModuleLoader {
     }
 
     /// Carrega um módulo do caminho especificado
-    /// 
+    ///
     /// NOTA: O processamento de "@self/", prefixo 'lib' e extensão é feito em lib.rs
     /// Esta função recebe o caminho já completo e pronto.
     pub fn load(&self, path: &str) -> Result<LuauExport, String> {

@@ -11,7 +11,8 @@ struct RuntimeHandle {
     #[allow(dead_code)]
     library: Library,
     luks_new: unsafe extern "C-unwind" fn() -> *mut std::ffi::c_void,
-    luks_execute: unsafe extern "C-unwind" fn(*mut std::ffi::c_void, *const i8, *const i8) -> *mut i8,
+    luks_execute:
+        unsafe extern "C-unwind" fn(*mut std::ffi::c_void, *const i8, *const i8) -> *mut i8,
     luks_destroy: unsafe extern "C-unwind" fn(*mut std::ffi::c_void),
     luks_free_error: unsafe extern "C-unwind" fn(*mut i8),
 }
@@ -36,7 +37,9 @@ impl RuntimeHandle {
         };
 
         let luks_execute = unsafe {
-            let sym: Symbol<unsafe extern "C-unwind" fn(*mut std::ffi::c_void, *const i8, *const i8) -> *mut i8> = library
+            let sym: Symbol<
+                unsafe extern "C-unwind" fn(*mut std::ffi::c_void, *const i8, *const i8) -> *mut i8,
+            > = library
                 .get(b"luks_execute\0")
                 .map_err(|e| format!("símbolo 'luks_execute' não encontrado: {}", e))?;
             *sym
