@@ -1,5 +1,5 @@
-use mlua::{Lua, Compiler, Result as LuaResult};
-use mlua::ffi as ffi;
+use mlua::ffi;
+use mlua::{Compiler, Lua, Result as LuaResult};
 use std::ffi::{CStr, CString};
 use std::path::PathBuf;
 use std::ptr;
@@ -10,7 +10,9 @@ fn normalize_path(path: &std::path::Path) -> PathBuf {
     for component in path.components() {
         match component {
             std::path::Component::Prefix(p) => result.push(p.as_os_str()),
-            std::path::Component::RootDir => result.push("/"),
+            std::path::Component::RootDir => {
+                result.push(component.as_os_str());
+            }
             std::path::Component::CurDir => { /* ignora . */ }
             std::path::Component::ParentDir => {
                 // Remove o último componente se houver
@@ -24,9 +26,9 @@ fn normalize_path(path: &std::path::Path) -> PathBuf {
     result
 }
 
+pub mod loader;
 pub mod luau_require;
 pub mod utils;
-pub mod loader;
 
 #[repr(C)]
 pub struct LuksRuntime {
@@ -37,8 +39,13 @@ pub struct LuksRuntime {
 unsafe fn get_script_dir(l: *mut ffi::lua_State) -> Option<std::path::PathBuf> {
     ffi::lua_getglobal(l, b"__script_dir__\0".as_ptr() as *const i8);
     let result = if ffi::lua_isstring(l, -1) != 0 {
-        let s = CStr::from_ptr(ffi::lua_tostring(l, -1)).to_string_lossy();
-        Some(std::path::PathBuf::from(s.as_ref()))
+        let ptr = ffi::lua_tostring(l, -1);
+        if ptr.is_null() {
+            None
+        } else {
+            let s = CStr::from_ptr(ptr).to_string_lossy();
+            Some(std::path::PathBuf::from(s.as_ref()))
+        }
     } else {
         None
     };
@@ -49,42 +56,104 @@ unsafe fn get_script_dir(l: *mut ffi::lua_State) -> Option<std::path::PathBuf> {
 /// Função interna dlopen exposta ao Lua
 /// Carrega uma biblioteca dinâmica e chama o luau_export
 unsafe extern "C-unwind" fn lua_dlopen(l: *mut ffi::lua_State) -> i32 {
-    let arg = CStr::from_ptr(ffi::luaL_checkstring(l, 1)).to_string_lossy();
+    if ffi::lua_isstring(l, 1) == 0 {
+        ffi::lua_pushnil(l);
+        let msg = CString::new("dlopen: argumento 1 deve ser string")
+            .unwrap_or_else(|_| CString::new("dlopen: argumento inválido").unwrap());
+        ffi::lua_pushstring(l, msg.as_ptr());
+        return 2;
+    }
+
+    let arg_ptr = ffi::lua_tostring(l, 1);
+    if arg_ptr.is_null() {
+        ffi::lua_pushnil(l);
+        let msg = CString::new("dlopen: argumento 1 inválido")
+            .unwrap_or_else(|_| CString::new("dlopen: argumento inválido").unwrap());
+        ffi::lua_pushstring(l, msg.as_ptr());
+        return 2;
+    }
+
+    let arg = CStr::from_ptr(arg_ptr).to_string_lossy();
 
     // Obtém diretório do script atual (para @self/ e caminhos relativos)
     let script_dir = get_script_dir(l);
 
     // Determina o diretório base: @self/ ou caminho relativo usa diretório do script
-    let raw_path = if let Some(rest) = arg.strip_prefix("@self/") {
+    let raw_path = if let Some(rest) = arg
+        .strip_prefix("@self/")
+        .or_else(|| arg.strip_prefix("@self\\"))
+    {
         // Resolve relativo ao diretório do script em execução
-        let base = script_dir
-            .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from(".")));
+        let base = script_dir.unwrap_or_else(|| {
+            std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."))
+        });
         base.join(rest)
-    } else if arg.starts_with("./") || arg.starts_with("../") {
+    } else if arg.starts_with("./")
+        || arg.starts_with("../")
+        || arg.starts_with(".\\")
+        || arg.starts_with("..\\")
+    {
         // Caminho relativo explícito: resolve relativo ao diretório do script
-        let base = script_dir
-            .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from(".")));
+        let base = script_dir.unwrap_or_else(|| {
+            std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."))
+        });
         base.join(arg.as_ref())
     } else if !arg.contains('/') && !arg.contains('\\') {
-        // Nome simples (sem separadores): 
-        // 1. Tenta diretório do script primeiro
-        let script_base = script_dir.clone()
-            .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from(".")));
-        let script_path = script_base.join(arg.as_ref());
-        if script_path.exists() {
-            script_path
+        // Nome simples (sem separadores):
+        // 1. Tenta diretório de script primeiro (com as mesmas variações de nome que serão carregadas)
+        let script_base = script_dir.clone().unwrap_or_else(|| {
+            std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."))
+        });
+
+        let mut candidates: Vec<std::path::PathBuf> = Vec::new();
+        let arg_path = std::path::Path::new(arg.as_ref());
+
+        if arg_path.extension().is_some() {
+            // Já tem extensão (ex: foo.dll) -> não adiciona DLL_EXTENSION
+            candidates.push(script_base.join(arg.as_ref()));
         } else {
-            // 2. Tenta nas pastas do sistema
-            if let Some(system_path) = loader::find_library(&arg) {
-                system_path
-            } else {
-                // 3. Fallback: caminho relativo ao script
-                script_path
+            // Candidato "direto" com extensão
+            candidates.push(script_base.join(format!(
+                "{}.{}",
+                arg,
+                std::env::consts::DLL_EXTENSION
+            )));
+
+            #[cfg(not(windows))]
+            {
+                // Em Unix, também tenta com prefixo lib quando apropriado
+                if !arg.starts_with("lib") {
+                    candidates.push(script_base.join(format!(
+                        "lib{}.{}",
+                        arg,
+                        std::env::consts::DLL_EXTENSION
+                    )));
+                }
             }
+        }
+
+        if let Some(found) = candidates.into_iter().find(|p| p.exists()) {
+            found
+        } else if let Some(system_path) = loader::find_library(&arg) {
+            // 2. Tenta nas pastas do sistema
+            system_path
+        } else {
+            // 3. Fallback: caminho relativo ao script (a extensão será adicionada abaixo)
+            script_base.join(arg.as_ref())
         }
     } else {
         // Caminho absoluto ou já qualificado
-        std::path::PathBuf::from(arg.as_ref())
+        let p = std::path::Path::new(arg.as_ref());
+        if p.is_absolute() {
+            p.to_path_buf()
+        } else {
+            // Se for um caminho relativo com separadores (ex: plugins/foo), resolve relativo ao script
+            // para evitar depender do CWD do processo.
+            let base = script_dir.unwrap_or_else(|| {
+                std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."))
+            });
+            base.join(p)
+        }
     };
 
     // Adiciona prefixo 'lib' no Linux/macOS se não tiver extensão e não começar com 'lib'
@@ -107,12 +176,14 @@ unsafe extern "C-unwind" fn lua_dlopen(l: *mut ffi::lua_State) -> i32 {
 
     let loader = loader::ModuleLoader::new();
     let path_str = path.to_string_lossy().to_string();
-    
+
     match loader.load(&path_str) {
         Ok(export) => export(l),
         Err(e) => {
             ffi::lua_pushnil(l);
-            ffi::lua_pushstring(l, CString::new(e).unwrap_or_default().as_ptr());
+            let sanitized = e.replace('\0', "\\0");
+            let msg = CString::new(sanitized).unwrap_or_else(|_| CString::new("erro").unwrap());
+            ffi::lua_pushstring(l, msg.as_ptr());
             2
         }
     }
@@ -142,19 +213,22 @@ pub unsafe extern "C-unwind" fn luks_new() -> *mut LuksRuntime {
             return ptr::null_mut();
         }
     };
-    
+
     // Cria wrapper que adiciona ./ a caminhos sem prefixo válido
     // Isso mantém compatibilidade com código que faz require("modulo") em vez de require("./modulo")
-    let require_wrapper = lua.create_function(move |_lua, module: String| -> mlua::Result<mlua::Value> {
-        let adjusted_path = if module.starts_with("./") || module.starts_with("../") || module.starts_with("@") {
-            module
-        } else {
-            // Adiciona ./ para caminhos sem prefixo (relativo ao diretório do script)
-            format!("./{}", module)
-        };
-        luau_require_fn.call::<mlua::Value>(adjusted_path)
-    });
-    
+    let require_wrapper =
+        lua.create_function(move |_lua, module: String| -> mlua::Result<mlua::Value> {
+            let adjusted_path =
+                if module.starts_with("./") || module.starts_with("../") || module.starts_with("@")
+                {
+                    module
+                } else {
+                    // Adiciona ./ para caminhos sem prefixo (relativo ao diretório do script)
+                    format!("./{}", module)
+                };
+            luau_require_fn.call::<mlua::Value>(adjusted_path)
+        });
+
     match require_wrapper {
         Ok(f) => {
             if let Err(e) = lua.globals().set("require", f) {
@@ -174,9 +248,7 @@ pub unsafe extern "C-unwind" fn luks_new() -> *mut LuksRuntime {
         return ptr::null_mut();
     }
 
-    let compiler = Compiler::new()
-        .set_optimization_level(1)
-        .set_debug_level(1);
+    let compiler = Compiler::new().set_optimization_level(1).set_debug_level(1);
     let _ = lua.set_compiler(compiler);
 
     Box::into_raw(Box::new(LuksRuntime { lua }))
@@ -200,7 +272,8 @@ pub unsafe extern "C-unwind" fn luks_execute(
     };
 
     // Define __script_dir__ para @self/ funcionar corretamente
-    let script_dir = std::path::Path::new(name_str)
+    let name_path = name_str.strip_prefix('@').unwrap_or(name_str);
+    let script_dir = std::path::Path::new(name_path)
         .parent()
         .map(|p| p.to_string_lossy().to_string())
         .unwrap_or_else(|| ".".to_string());
