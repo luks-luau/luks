@@ -2,8 +2,8 @@ mod cache;
 mod platform;
 pub mod search;
 
-pub use platform::LuauExport;
 pub use platform::clear_loaded_libs;
+pub use platform::LuauExport;
 pub use search::{executable_dir, find_library, system_library_paths};
 
 use cache::ModuleCache;
