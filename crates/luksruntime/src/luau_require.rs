@@ -126,8 +126,21 @@ impl Default for LuksRequirer {
 
 impl Require for LuksRequirer {
     /// Verifica se require é permitido para o chunk especificado
-    fn is_require_allowed(&self, _chunk_name: &str) -> bool {
-        true // Sempre permitir
+    fn is_require_allowed(&self, chunk_name: &str) -> bool {
+        // Tenta verificar a permissão de forma segura com proteção contra panic
+        match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            crate::permissions::Permissions::current().check_import()
+        })) {
+            Ok(Ok(_)) => true, // Permitido
+            Ok(Err(e)) => {
+                eprintln!("[LUKS] Permission Denied: require('{}') -> {}", chunk_name, e);
+                false // Bloqueado
+            }
+            Err(_) => {
+                eprintln!("[LUKS] Internal Error: Permission check panicked. Denying access to '{}'.", chunk_name);
+                false // Fail-safe: negar em caso de erro interno
+            }
+        }
     }
 
     /// Reseta o estado para o diretório do chunk que está fazendo require
