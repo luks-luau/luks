@@ -6,6 +6,8 @@ use std::path::PathBuf;
 use std::ptr;
 
 pub mod ffi_utils;
+pub mod permissions;
+pub use permissions::Permissions;
 
 /// Normaliza um caminho removendo componentes . e ..
 fn normalize_path(path: &std::path::Path) -> PathBuf {
@@ -189,6 +191,32 @@ unsafe fn lua_dlopen_impl(l: *mut ffi::lua_State) -> i32 {
 
     // Normaliza o caminho removendo . e ..
     let path = normalize_path(&path);
+
+    // Verificar permissão NATIVE com proteção contra panic
+    let perm_check = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        crate::permissions::Permissions::current().check_native()
+    }));
+
+    match perm_check {
+        Ok(Ok(_)) => {
+            // Permissão concedida, segue o fluxo normal
+        }
+        Ok(Err(e)) => {
+            // Permissão negada
+            let safe_msg = e.replace('\0', "");
+            if let Ok(c_str) = std::ffi::CString::new(safe_msg) {
+                ffi::lua_pushstring(l, c_str.as_ptr());
+            } else {
+                ffi::lua_pushliteral(l, c"Native module loading denied");
+            }
+            return 1; // Retorna 1 valor (a string de erro) para o Lua
+        }
+        Err(_) => {
+            // Panic interno na verificação (Fail-safe)
+            ffi::lua_pushliteral(l, c"dlopen blocked: internal permission error");
+            return 1;
+        }
+    }
 
     let loader = loader::ModuleLoader::new();
     let path_str = path.to_string_lossy().to_string();
