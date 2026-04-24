@@ -1,3 +1,4 @@
+use crate::utils::canonicalize_or_absolute;
 use libloading::{Library, Symbol};
 use std::path::Path;
 use std::sync::Mutex;
@@ -13,9 +14,7 @@ static LOADED_LIBS: LazyLock<Mutex<Vec<(std::path::PathBuf, Library)>>> =
 
 /// Carrega uma biblioteca e retorna o símbolo "luau_export"
 pub fn load_export(path: &Path) -> Result<LuauExport, String> {
-    let key = std::fs::canonicalize(path)
-        .or_else(|_| std::path::absolute(path))
-        .unwrap_or_else(|_| path.to_path_buf());
+    let key = canonicalize_or_absolute(path);
 
     let mut libs = LOADED_LIBS
         .lock()
