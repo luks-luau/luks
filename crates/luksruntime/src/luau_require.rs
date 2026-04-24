@@ -175,20 +175,14 @@ impl Require for LuksRequirer {
     /// Retorna a chave de cache para o módulo atual
     /// Usada pelo Luau para cache em package.loaded
     fn cache_key(&self) -> String {
-        // Usa o caminho canônico como chave de cache
+        // Usa o helper unificado para garantir consistência com dlopen
         let Some(module) = self.find_module() else {
             return self.current_path.to_string_lossy().to_string();
         };
 
-        if let Ok(canon) = std::fs::canonicalize(&module) {
-            return canon.to_string_lossy().to_string();
-        }
-
-        if let Ok(abs) = std::path::absolute(&module) {
-            return abs.to_string_lossy().to_string();
-        }
-
-        module.to_string_lossy().to_string()
+        crate::utils::canonicalize_or_absolute(&module)
+            .to_string_lossy()
+            .to_string()
     }
 
     /// Verifica se existe configuração no contexto atual (não usado)

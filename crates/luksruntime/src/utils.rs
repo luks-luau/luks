@@ -42,3 +42,16 @@ pub fn resolve_path(lua: &Lua, input: &str) -> PathBuf {
         base.join(p)
     }
 }
+
+/// Canonicaliza um caminho, com fallback para caminho absoluto se o arquivo não existir.
+/// Isso garante uma chave de cache consistente mesmo se o arquivo ainda não foi criado.
+///
+/// Prioridade:
+/// 1. `fs::canonicalize`: Resolve symlinks e caminho absoluto (falha se não existir)
+/// 2. `path::absolute`: Resolve caminho absoluto sem resolver symlinks (não verifica existência)
+/// 3. Fallback: Retorna o path original se tudo falhar
+pub fn canonicalize_or_absolute(path: &Path) -> PathBuf {
+    std::fs::canonicalize(path)
+        .or_else(|_| std::path::absolute(path))
+        .unwrap_or_else(|_| path.to_path_buf())
+}
