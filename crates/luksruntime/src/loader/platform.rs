@@ -14,6 +14,11 @@ static LOADED_LIBS: LazyLock<Mutex<Vec<(std::path::PathBuf, Library)>>> =
 
 /// Carrega uma biblioteca e retorna o símbolo "luau_export"
 pub fn load_export(path: &Path) -> Result<LuauExport, String> {
+    // Enforce permission check: if native loading is not allowed, deny the dlopen
+    crate::permissions::Permissions::current()
+        .check_native()
+        .map_err(|e| e.to_string())?;
+
     let key = canonicalize_or_absolute(path);
 
     let mut libs = LOADED_LIBS
