@@ -15,5 +15,7 @@ repository = "https://github.com/luks-luau/luks"
 opt-level = "z"
 lto = "fat"
 codegen-units = 1
-panic = "abort"
+# panic = "unwind" is required for catch_unwind to work in FFI boundaries
+# abort mode prevents panic recovery and causes "panic_nounwind" crashes
+# panic = "abort"
 strip = true

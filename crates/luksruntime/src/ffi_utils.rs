@@ -78,15 +78,16 @@ pub fn ffi_cstring_result(result: Result<String, String>) -> *mut std::os::raw::
 }
 
 /// Converte uma mensagem de erro em CString seguro, com fallback
+/// Nunca retorna null - sempre aloca uma string válida
 pub fn ffi_error_msg(msg: impl ToString) -> *mut std::os::raw::c_char {
     let s = msg.to_string();
-    match CString::new(s) {
+    // Sanitiza null bytes que fariam CString::new falhar
+    let sanitized = s.replace('\0', "\\0");
+    match CString::new(sanitized) {
         Ok(cstr) => cstr.into_raw(),
         Err(_) => {
-            // Fallback: tenta criar uma mensagem genérica sem nulls
-            CString::new("internal error: invalid utf-8 or null byte")
-                .unwrap_or_else(|_| CString::new("error").unwrap())
-                .into_raw()
+            // Fallback absoluto: esta string é garantida sem nulls
+            CString::new("internal error").unwrap().into_raw()
         }
     }
 }
