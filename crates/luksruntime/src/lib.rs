@@ -1,8 +1,11 @@
 use mlua::ffi;
 use mlua::{Compiler, Lua, Result as LuaResult};
 use std::ffi::{CStr, CString};
+use std::os::raw::c_char;
 use std::path::PathBuf;
 use std::ptr;
+
+pub mod ffi_utils;
 
 /// Normaliza um caminho removendo componentes . e ..
 fn normalize_path(path: &std::path::Path) -> PathBuf {
@@ -55,21 +58,34 @@ unsafe fn get_script_dir(l: *mut ffi::lua_State) -> Option<std::path::PathBuf> {
 
 /// Função interna dlopen exposta ao Lua
 /// Carrega uma biblioteca dinâmica e chama o luau_export
+///
+/// # Safety
+/// Esta função é marcada extern "C-unwind" mas ainda envolve o corpo
+/// com catch_unwind para garantir que panics do Rust não vazem para Lua C.
 unsafe extern "C-unwind" fn lua_dlopen(l: *mut ffi::lua_State) -> i32 {
+    ffi_utils::ffi_catch_unwind(|| {
+        // Corpo da função movido para dentro do catch_unwind
+        lua_dlopen_impl(l)
+    })
+    .unwrap_or(0) // Retorna 0 (sucesso vazio) em caso de panic para não crashar
+}
+
+/// Implementação interna de dlopen, isolada para teste e segurança
+unsafe fn lua_dlopen_impl(l: *mut ffi::lua_State) -> i32 {
     if ffi::lua_isstring(l, 1) == 0 {
         ffi::lua_pushnil(l);
-        let msg = CString::new("dlopen: argumento 1 deve ser string")
-            .unwrap_or_else(|_| CString::new("dlopen: argumento inválido").unwrap());
-        ffi::lua_pushstring(l, msg.as_ptr());
+        let msg = ffi_utils::ffi_error_msg("dlopen: argumento 1 deve ser string");
+        ffi::lua_pushstring(l, msg);
+        drop(CString::from_raw(msg)); // Lua copia a string, então liberamos
         return 2;
     }
 
     let arg_ptr = ffi::lua_tostring(l, 1);
     if arg_ptr.is_null() {
         ffi::lua_pushnil(l);
-        let msg = CString::new("dlopen: argumento 1 inválido")
-            .unwrap_or_else(|_| CString::new("dlopen: argumento inválido").unwrap());
-        ffi::lua_pushstring(l, msg.as_ptr());
+        let msg = ffi_utils::ffi_error_msg("dlopen: argumento 1 inválido");
+        ffi::lua_pushstring(l, msg);
+        drop(CString::from_raw(msg));
         return 2;
     }
 
@@ -182,8 +198,13 @@ unsafe extern "C-unwind" fn lua_dlopen(l: *mut ffi::lua_State) -> i32 {
         Err(e) => {
             ffi::lua_pushnil(l);
             let sanitized = e.replace('\0', "\\0");
-            let msg = CString::new(sanitized).unwrap_or_else(|_| CString::new("erro").unwrap());
-            ffi::lua_pushstring(l, msg.as_ptr());
+            // Usa ffi_utils para evitar panic em CString::new com null bytes
+            let msg = ffi_utils::ffi_error_msg(sanitized);
+            ffi::lua_pushstring(l, msg);
+            // Nota: msg é alocado via CString::into_raw, mas Lua faz cópia da string.
+            // Para evitar vazamento, precisamos liberar após lua_pushstring copiar.
+            // Como lua_pushstring copia o conteúdo, podemos liberar imediatamente:
+            drop(CString::from_raw(msg));
             2
         }
     }
@@ -202,6 +223,11 @@ fn register_dlopen(lua: &Lua) -> LuaResult<()> {
 
 #[no_mangle]
 pub unsafe extern "C-unwind" fn luks_new() -> *mut LuksRuntime {
+    ffi_utils::ffi_catch_unwind(|| luks_new_impl()).unwrap_or(ptr::null_mut())
+}
+
+/// Implementação segura de luks_new, isolada para catch_unwind
+unsafe fn luks_new_impl() -> *mut LuksRuntime {
     let lua = unsafe { Lua::unsafe_new() };
 
     // Configura o require nativo do Luau usando nosso trait Require
@@ -260,16 +286,24 @@ pub unsafe extern "C-unwind" fn luks_execute(
     source: *const i8,
     chunk_name: *const i8,
 ) -> *mut i8 {
+    ffi_utils::ffi_catch_unwind(|| luks_execute_impl(rt, source, chunk_name))
+        .unwrap_or(ptr::null_mut())
+}
+
+/// Implementação interna de luks_execute com tratamento seguro de erros
+unsafe fn luks_execute_impl(
+    rt: *mut LuksRuntime,
+    source: *const i8,
+    chunk_name: *const i8,
+) -> *mut c_char {
     if rt.is_null() || source.is_null() {
-        return CString::new("runtime ou source nulo").unwrap().into_raw();
+        return ffi_utils::ffi_error_msg("runtime ou source nulo");
     }
     let rt = &mut *rt;
     let src = match CStr::from_ptr(source).to_str() {
         Ok(s) => s,
         Err(e) => {
-            return CString::new(format!("source inválido (utf-8): {}", e))
-                .unwrap_or_else(|_| CString::new("source inválido").unwrap())
-                .into_raw();
+            return ffi_utils::ffi_error_msg(format!("source inválido (utf-8): {}", e));
         }
     };
     let name_str = if chunk_name.is_null() {
@@ -278,9 +312,7 @@ pub unsafe extern "C-unwind" fn luks_execute(
         match CStr::from_ptr(chunk_name).to_str() {
             Ok(s) => s,
             Err(e) => {
-                return CString::new(format!("chunk_name inválido (utf-8): {}", e))
-                    .unwrap_or_else(|_| CString::new("chunk_name inválido").unwrap())
-                    .into_raw();
+                return ffi_utils::ffi_error_msg(format!("chunk_name inválido (utf-8): {}", e));
             }
         }
     };
@@ -295,14 +327,13 @@ pub unsafe extern "C-unwind" fn luks_execute(
 
     match rt.lua.load(src).set_name(name_str).exec() {
         Ok(_) => ptr::null_mut(),
-        Err(e) => CString::new(format!("runtime error: {}", e))
-            .unwrap_or_else(|_| CString::new("erro").unwrap())
-            .into_raw(),
+        Err(e) => ffi_utils::ffi_error_msg(format!("runtime error: {}", e)),
     }
 }
 
 #[no_mangle]
 pub unsafe extern "C-unwind" fn luks_free_error(err: *mut i8) {
+    // Não precisa de catch_unwind: drop de CString não pode panicar em condições normais
     if !err.is_null() {
         drop(CString::from_raw(err));
     }
@@ -310,16 +341,16 @@ pub unsafe extern "C-unwind" fn luks_free_error(err: *mut i8) {
 
 #[no_mangle]
 pub unsafe extern "C-unwind" fn luks_clear_loaded_libs() -> *mut i8 {
-    match loader::clear_loaded_libs() {
+    ffi_utils::ffi_catch_unwind(|| match loader::clear_loaded_libs() {
         Ok(()) => ptr::null_mut(),
-        Err(e) => CString::new(e)
-            .unwrap_or_else(|_| CString::new("erro").unwrap())
-            .into_raw(),
-    }
+        Err(e) => ffi_utils::ffi_error_msg(e),
+    })
+    .unwrap_or(ffi_utils::ffi_error_msg("panic during clear_loaded_libs"))
 }
 
 #[no_mangle]
 pub unsafe extern "C-unwind" fn luks_destroy(rt: *mut LuksRuntime) {
+    // Não precisa de catch_unwind: drop de Box não pode panicar
     if !rt.is_null() {
         drop(Box::from_raw(rt));
     }
