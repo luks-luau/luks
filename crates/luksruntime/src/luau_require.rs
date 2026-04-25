@@ -131,9 +131,9 @@ impl Require for LuksRequirer {
         match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             crate::permissions::Permissions::current().check_import()
         })) {
-            Ok(Ok(_)) => true, // Permitido
-            Ok(Err(e)) => {
-                eprintln!("[LUKS] Permission Denied: require('{}') -> {}", chunk_name, e);
+            Ok(true) => true, // Permitido
+            Ok(false) => {
+                eprintln!("[LUKS] Permission Denied: require('{}')", chunk_name);
                 false // Bloqueado
             }
             Err(_) => {

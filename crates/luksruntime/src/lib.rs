@@ -198,17 +198,12 @@ unsafe fn lua_dlopen_impl(l: *mut ffi::lua_State) -> i32 {
     }));
 
     match perm_check {
-        Ok(Ok(_)) => {
+        Ok(true) => {
             // Permissão concedida, segue o fluxo normal
         }
-        Ok(Err(e)) => {
+        Ok(false) => {
             // Permissão negada
-            let safe_msg = e.replace('\0', "");
-            if let Ok(c_str) = std::ffi::CString::new(safe_msg) {
-                ffi::lua_pushstring(l, c_str.as_ptr());
-            } else {
-                ffi::lua_pushliteral(l, c"Native module loading denied");
-            }
+            ffi::lua_pushliteral(l, c"Native module loading denied");
             return 1; // Retorna 1 valor (a string de erro) para o Lua
         }
         Err(_) => {
@@ -382,4 +377,25 @@ pub unsafe extern "C-unwind" fn luks_destroy(rt: *mut LuksRuntime) {
     if !rt.is_null() {
         drop(Box::from_raw(rt));
     }
+}
+
+/// Retorna a versão do runtime (obtida do Cargo.toml em tempo de compilação)
+#[no_mangle]
+pub unsafe extern "C-unwind" fn luks_version() -> *const c_char {
+    const VER: &[u8] = concat!(env!("CARGO_PKG_VERSION"), "\0").as_bytes();
+    VER.as_ptr() as *const c_char
+}
+
+/// Retorna a versão da VM Luau atualmente vinculada (dinâmica, sem hardcode)
+#[no_mangle]
+pub unsafe extern "C-unwind" fn luks_luau_version() -> *const c_char {
+    use std::sync::OnceLock;
+    use std::ffi::CString;
+
+    static LUAU_VER: OnceLock<CString> = OnceLock::new();
+    LUAU_VER.get_or_init(|| {
+        // mlua_sys::luau_version retorna Option<&'static str>
+        let ver = mlua_sys::luau_version().unwrap_or("unknown");
+        CString::new(ver).expect("Luau version string contained null byte")
+    }).as_ptr()
 }
