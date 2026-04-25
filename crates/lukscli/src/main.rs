@@ -1,168 +1,72 @@
-// crates/lukscli/src/main.rs
-use libloading::{Library, Symbol};
-use std::env;
-use std::ffi::{CStr, CString};
-use std::fs;
+mod cli;
+mod runtime;
+mod repl;
+
+use clap::{CommandFactory, Parser};
+use cli::{Cli, Commands};
 use std::path::PathBuf;
-use std::process;
+use anyhow::Result;
 
-/// Estrutura que encapsula o runtime carregado dinamicamente
-struct RuntimeHandle {
-    #[allow(dead_code)]
-    library: Library,
-    luks_new: unsafe extern "C-unwind" fn() -> *mut std::ffi::c_void,
-    luks_execute:
-        unsafe extern "C-unwind" fn(*mut std::ffi::c_void, *const i8, *const i8) -> *mut i8,
-    luks_destroy: unsafe extern "C-unwind" fn(*mut std::ffi::c_void),
-    luks_free_error: unsafe extern "C-unwind" fn(*mut i8),
-}
+fn main() -> Result<()> {
+    let cli = Cli::parse();
 
-impl RuntimeHandle {
-    /// Carrega o runtime da biblioteca dinâmica
-    fn load() -> Result<Self, String> {
-        // Encontra o caminho da biblioteca
-        let lib_path = Self::find_runtime_library()?;
-
-        let library = unsafe {
-            Library::new(&lib_path)
-                .map_err(|e| format!("falha ao carregar '{}': {}", lib_path.display(), e))?
-        };
-
-        // Carrega os símbolos e copia os ponteiros de função imediatamente
-        let luks_new = unsafe {
-            let sym: Symbol<unsafe extern "C-unwind" fn() -> *mut std::ffi::c_void> = library
-                .get(b"luks_new\0")
-                .map_err(|e| format!("símbolo 'luks_new' não encontrado: {}", e))?;
-            *sym
-        };
-
-        let luks_execute = unsafe {
-            let sym: Symbol<
-                unsafe extern "C-unwind" fn(*mut std::ffi::c_void, *const i8, *const i8) -> *mut i8,
-            > = library
-                .get(b"luks_execute\0")
-                .map_err(|e| format!("símbolo 'luks_execute' não encontrado: {}", e))?;
-            *sym
-        };
-
-        let luks_destroy = unsafe {
-            let sym: Symbol<unsafe extern "C-unwind" fn(*mut std::ffi::c_void)> = library
-                .get(b"luks_destroy\0")
-                .map_err(|e| format!("símbolo 'luks_destroy' não encontrado: {}", e))?;
-            *sym
-        };
-
-        let luks_free_error = unsafe {
-            let sym: Symbol<unsafe extern "C-unwind" fn(*mut i8)> = library
-                .get(b"luks_free_error\0")
-                .map_err(|e| format!("símbolo 'luks_free_error' não encontrado: {}", e))?;
-            *sym
-        };
-
-        Ok(RuntimeHandle {
-            library,
-            luks_new,
-            luks_execute,
-            luks_destroy,
-            luks_free_error,
-        })
+    // Handle global flags immediately (before command resolution)
+    if cli.show_version {
+        cmd_version()?;
+        return Ok(());
+    }
+    if cli.show_help {
+        Cli::command().print_help()?;
+        return Ok(());
     }
 
-    /// Encontra o caminho do runtime baseado na plataforma
-    fn find_runtime_library() -> Result<PathBuf, String> {
-        let exe_path = env::current_exe()
-            .map_err(|e| format!("falha ao obter caminho do executável: {}", e))?;
+    // Aplicar permissões ANTES de carregar o runtime
+    if cli.strict { std::env::set_var("LUKS_STRICT", "1"); }
+    if cli.no_read { std::env::set_var("LUKS_DENY_READ", "1"); }
+    if cli.no_native { std::env::set_var("LUKS_DENY_NATIVE", "1"); }
 
-        let exe_dir = exe_path
-            .parent()
-            .ok_or("não foi possível determinar diretório do executável")?;
-
-        // Nome da biblioteca varia por plataforma
-        // Windows: luksruntime.dll
-        // Linux: libluksruntime.so
-        // macOS: libluksruntime.dylib
-        let lib_name = if cfg!(windows) {
-            "luksruntime.dll".to_string()
-        } else if cfg!(target_os = "macos") {
-            "libluksruntime.dylib".to_string()
-        } else {
-            "libluksruntime.so".to_string()
-        };
-
-        // Procura no diretório do executável
-        let lib_path = exe_dir.join(&lib_name);
-        if lib_path.exists() {
-            return Ok(lib_path);
-        }
-
-        // Procura no subdiretório lib/
-        let lib_path = exe_dir.join("lib").join(&lib_name);
-        if lib_path.exists() {
-            return Ok(lib_path);
-        }
-
-        // Procura no diretório target/release (modo desenvolvimento)
-        let dev_path = exe_dir
-            .parent()
-            .and_then(|p| p.parent())
-            .map(|p| p.join("target").join("release").join(&lib_name));
-
-        if let Some(ref path) = dev_path {
-            if path.exists() {
-                return Ok(path.clone());
+    // Resolução de Comando (Fallback Legacy)
+    let cmd = match cli.command {
+        Some(c) => c,
+        None => {
+            if cli.trailing.is_empty() {
+                Commands::Repl
+            } else {
+                Commands::Run { path: PathBuf::from(&cli.trailing[0]) }
             }
         }
+    };
 
-        Err(format!(
-            "não encontrou '{}' em: {:?}, {:?}, ou {:?}",
-            lib_name,
-            exe_dir.join(&lib_name),
-            exe_dir.join("lib").join(&lib_name),
-            dev_path
-        ))
+    match cmd {
+        Commands::Run { path } => cmd_run(&path)?,
+        Commands::Eval { code } => cmd_eval(&code)?,
+        Commands::Repl => repl::run_repl()?,
+        Commands::Version => cmd_version()?,
+        Commands::Help => Cli::command().print_help()?,
     }
+    Ok(())
 }
 
-fn main() {
-    let script = env::args().nth(1).unwrap_or_else(|| {
-        eprintln!("uso: lukscli <arquivo.luau>");
-        process::exit(1);
-    });
+fn cmd_run(path: &PathBuf) -> Result<()> {
+    let rt = runtime::RuntimeHandle::load()?;
+    let source = std::fs::read_to_string(path)?;
+    rt.execute(&source, path.to_str().unwrap_or("script"))
+}
 
-    // Carrega o runtime
-    let runtime = RuntimeHandle::load().unwrap_or_else(|e| {
-        eprintln!("falha ao carregar runtime: {}", e);
-        process::exit(1);
-    });
+fn cmd_eval(code: &str) -> Result<()> {
+    let rt = runtime::RuntimeHandle::load()?;
+    rt.execute(code, "<eval>")
+}
 
-    let source = fs::read_to_string(&script).unwrap_or_else(|e| {
-        eprintln!("falha ao ler '{}': {}", script, e);
-        process::exit(1);
-    });
+fn cmd_version() -> Result<()> {
+    let cli_ver = env!("CARGO_PKG_VERSION");
+    let rt = runtime::RuntimeHandle::load()?;
+    let (rt_ver, luau_ver) = rt.get_versions()?;
 
-    let c_source = CString::new(source).expect("script com null byte");
-    let c_name = CString::new(script.clone()).expect("nome com null byte");
-
-    unsafe {
-        let rt = (runtime.luks_new)();
-        if rt.is_null() {
-            eprintln!("falha ao criar runtime");
-            process::exit(1);
-        }
-
-        println!("Executing {}...", script);
-
-        let err_ptr = (runtime.luks_execute)(rt, c_source.as_ptr(), c_name.as_ptr());
-
-        if !err_ptr.is_null() {
-            let msg = CStr::from_ptr(err_ptr).to_string_lossy();
-            eprintln!("Error: {}", msg);
-            (runtime.luks_free_error)(err_ptr);
-            (runtime.luks_destroy)(rt);
-            process::exit(1);
-        }
-
-        println!("Script executed successfully.");
-        (runtime.luks_destroy)(rt);
-    }
+    println!("╭────────────────────────────────────╮");
+    println!("│  Luks CLI    {:<20} │", cli_ver);
+    println!("│  Runtime     {:<20} │", rt_ver);
+    println!("│  Luau VM     {:<20} │", luau_ver);
+    println!("╰────────────────────────────────────╯");
+    Ok(())
 }
