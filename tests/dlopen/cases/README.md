@@ -9,7 +9,7 @@ Tests native library loading and object passing.
 1. **DLOPEN RETURNS VALID MODULE OBJECT**
    - `dlopen` returns a valid module object
    - Type must be `table`
-   - Path: `@self/../../target/release/testmodule`
+   - Path: `@self/../../../target/release/testmodule`
 
 2. **MODULE HAS EXPECTED EXPORTS**
    - Verifies that the Rust module exports `version` and `hello`
@@ -41,3 +41,17 @@ Functions:
 
 - The Rust test module (`testmodule`) must be compiled in `target/release/`
 - Tests verify actual values to avoid "fake pass"
+
+## #2.luau - `@self` Semantics
+
+Validates `@self` behavior for dynamic loading from different module shapes.
+
+### Tests
+
+1. **@SELF IN FILE MODULE RESOLVES TO MODULE DIRECTORY**
+   - Loads a regular module file that calls `dlopen("@self/...")`
+   - `@self` must resolve from that file's directory
+
+2. **@SELF IN INIT MODULE RESOLVES TO PACKAGE DIRECTORY**
+   - Loads a package module (`init.luau`) that calls `dlopen("@self/...")`
+   - `@self` must resolve from the package directory containing `init.luau`
