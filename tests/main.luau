@@ -29,6 +29,7 @@ local test_cases = {
     { folder = "require", case = 1 },
     { folder = "require", case = 2 },
     { folder = "dlopen", case = 1 },
+    { folder = "dlopen", case = 2 },
 }
 
 -- Cache for loaded test cases

@@ -49,8 +49,10 @@ fn main() -> Result<()> {
 
 fn cmd_run(path: &PathBuf) -> Result<()> {
     let rt = runtime::RuntimeHandle::load()?;
-    let source = std::fs::read_to_string(path)?;
-    rt.execute(&source, path.to_str().unwrap_or("script"))
+    let absolute_path = std::fs::canonicalize(path)?;
+    let source = std::fs::read_to_string(&absolute_path)?;
+    let chunk_name = absolute_path.to_string_lossy().to_string();
+    rt.execute(&source, &chunk_name)
 }
 
 fn cmd_eval(code: &str) -> Result<()> {

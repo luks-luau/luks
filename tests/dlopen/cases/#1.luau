@@ -7,28 +7,28 @@ return function(expect)
     h.suite("Dlopen Object Passing Tests", function()
 
         h.test("dlopen returns valid module object", function()
-            local mymod = dlopen("@self/../../target/release/testmodule")
+            local mymod = dlopen("@self/../../../target/release/testmodule")
 
             expect.not_nil(mymod, "dlopen should return a module")
             expect.type_(mymod, "table", "module should be a table")
         end)
 
         h.test("module has expected exports", function()
-            local mymod = dlopen("@self/../../target/release/testmodule")
+            local mymod = dlopen("@self/../../../target/release/testmodule")
 
             expect.not_nil(mymod.version, "module should export version")
             expect.type_(mymod.hello, "function", "module should export hello function")
         end)
 
         h.test("hello function returns string", function()
-            local mymod = dlopen("@self/../../target/release/testmodule")
+            local mymod = dlopen("@self/../../../target/release/testmodule")
             local result = mymod.hello()
 
             expect.type_(result, "string", "hello() should return a string")
         end)
 
         h.test("can pass dlopen object to another module", function()
-            local mymod = dlopen("@self/../../target/release/testmodule")
+            local mymod = dlopen("@self/../../../target/release/testmodule")
             expect.not_nil(mymod, "dlopen should return module")
             expect.eq(mymod.version, "1.0.0", "module should have correct version")
 
@@ -39,7 +39,7 @@ return function(expect)
         end)
 
         h.test("can call methods on passed object", function()
-            local mymod = dlopen("@self/../../target/release/testmodule")
+            local mymod = dlopen("@self/../../../target/release/testmodule")
             expect.not_nil(mymod.hello, "hello function should exist")
 
             local result = mymod.hello()

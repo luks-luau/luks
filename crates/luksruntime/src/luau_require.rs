@@ -216,7 +216,6 @@ impl Require for LuksRequirer {
                 self.current_path.display()
             ))
         })?;
-
         // Lê o arquivo
         let mut file = File::open(&path)
             .map_err(|e| mlua::Error::runtime(format!("abrir '{}': {}", path.display(), e)))?;
