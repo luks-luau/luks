@@ -58,6 +58,68 @@ unsafe fn get_script_dir(l: *mut ffi::lua_State) -> Option<std::path::PathBuf> {
     result
 }
 
+fn extract_source_path(src: &str) -> Option<String> {
+    if let Some(rest) = src.strip_prefix('@') {
+        return Some(rest.to_string());
+    }
+
+    if let Some(inner) = src
+        .strip_prefix("[string \"")
+        .and_then(|s| s.strip_suffix("\"]"))
+    {
+        if let Some(rest) = inner.strip_prefix('@') {
+            return Some(rest.to_string());
+        }
+        let p = std::path::Path::new(inner);
+        if p.is_absolute() {
+            return Some(inner.to_string());
+        }
+    }
+
+    let p = std::path::Path::new(src);
+    if p.is_absolute() {
+        return Some(src.to_string());
+    }
+
+    None
+}
+
+/// Obtém o diretório do script chamador inspecionando a stack do Luau.
+unsafe fn get_caller_script_dir(l: *mut ffi::lua_State) -> Option<std::path::PathBuf> {
+    const WHAT_SOURCE: &[u8] = b"s\0";
+
+    for level in 1..=32 {
+        let mut ar: ffi::lua_Debug = std::mem::zeroed();
+        if ffi::lua_getinfo(
+            l,
+            level,
+            WHAT_SOURCE.as_ptr() as *const i8,
+            &mut ar as *mut ffi::lua_Debug,
+        ) == 0
+        {
+            break;
+        }
+
+        for src_ptr in [ar.source, ar.short_src] {
+            if src_ptr.is_null() {
+                continue;
+            }
+
+            let src = CStr::from_ptr(src_ptr).to_string_lossy();
+            let Some(path_str) = extract_source_path(src.as_ref()) else {
+                continue;
+            };
+
+            let path = std::path::Path::new(&path_str);
+            if let Some(parent) = path.parent() {
+                return Some(parent.to_path_buf());
+            }
+        }
+    }
+
+    None
+}
+
 /// Função interna dlopen exposta ao Lua
 /// Carrega uma biblioteca dinâmica e chama o luau_export
 ///
@@ -92,9 +154,8 @@ unsafe fn lua_dlopen_impl(l: *mut ffi::lua_State) -> i32 {
     }
 
     let arg = CStr::from_ptr(arg_ptr).to_string_lossy();
-
-    // Obtém diretório do script atual (para @self/ e caminhos relativos)
-    let script_dir = get_script_dir(l);
+    // Obtém diretório do chamador (stack), com fallback para a global __script_dir__.
+    let script_dir = get_caller_script_dir(l).or_else(|| get_script_dir(l));
 
     // Determina o diretório base: @self/ ou caminho relativo usa diretório do script
     let raw_path = if let Some(rest) = arg
