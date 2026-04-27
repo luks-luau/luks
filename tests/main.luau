@@ -28,8 +28,12 @@ local colors = {
 local test_cases = {
     { folder = "require", case = 1 },
     { folder = "require", case = 2 },
+    { folder = "require", case = 3 },
+    { folder = "require", case = 4 },
     { folder = "dlopen", case = 1 },
     { folder = "dlopen", case = 2 },
+    { folder = "dlopen", case = 3 },
+    { folder = "dlopen", case = 4 },
 }
 
 -- Cache for loaded test cases

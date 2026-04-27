@@ -27,6 +27,12 @@ tests/
 .\target\release\lukscli.exe .\tests\main.luau
 ```
 
+## Casos Atuais
+- require(#1) - Basic Require Tests
+- require(#2) - Cache Tests
+
+Veja também a documentação de convenções de commits no arquivo notes/git-calisthenics.md para manter o padrão de commits (Conventional Commits).
+
 ## Adding New Tests
 
 1. Create file in `CATEGORY/cases/#N.luau`

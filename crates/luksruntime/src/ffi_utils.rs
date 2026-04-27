@@ -125,8 +125,19 @@ mod tests {
             // Deve retornar fallback, não panicar
             assert!(!ptr.is_null());
             let s = CStr::from_ptr(ptr).to_str().unwrap();
-            assert!(s.contains("error") || s.contains("invalid"));
+            // Deve retornar a string com o valor sanitizado (\0 substituído por \\0)
+            let expected = "hello\\0world";
+            assert_eq!(s, expected);
             drop(CString::from_raw(ptr));
         }
+    }
+
+    #[test]
+    fn test_ffi_catch_unwind_panics_returns_none() {
+        // Ensure that a panic inside a closure passed to ffi_catch_unwind is converted to None
+        let res = super::ffi_catch_unwind(|| {
+            panic!("intentional panic for test");
+        });
+        assert!(res.is_none(), "ffi_catch_unwind should convert panic to None");
     }
 }

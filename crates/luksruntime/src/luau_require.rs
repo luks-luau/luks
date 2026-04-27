@@ -210,24 +210,31 @@ impl Require for LuksRequirer {
 
     /// Cria e retorna a função loader para o módulo atual
     fn loader(&self, lua: &Lua) -> LuaResult<Function> {
-        let path = self.find_module().ok_or_else(|| {
-            mlua::Error::runtime(format!(
-                "módulo não encontrado: {}",
-                self.current_path.display()
-            ))
-        })?;
-        // Lê o arquivo
-        let mut file = File::open(&path)
-            .map_err(|e| mlua::Error::runtime(format!("abrir '{}': {}", path.display(), e)))?;
+        // Wrap in catch_unwind to convert panics into Lua errors
+        let res = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let path = self.find_module().ok_or_else(|| {
+                mlua::Error::runtime(format!(
+                    "módulo não encontrado: {}",
+                    self.current_path.display()
+                ))
+            })?;
+            // Lê o arquivo
+            let mut file = File::open(&path)
+                .map_err(|e| mlua::Error::runtime(format!("abrir '{}': {}", path.display(), e)))?;
 
-        let mut source = String::new();
-        file.read_to_string(&mut source)
-            .map_err(|e| mlua::Error::runtime(format!("ler '{}': {}", path.display(), e)))?;
+            let mut source = String::new();
+            file.read_to_string(&mut source)
+                .map_err(|e| mlua::Error::runtime(format!("ler '{}': {}", path.display(), e)))?;
 
-        // Compila e retorna a função
-        // O mlua/Luau gerencia o cache e o ambiente
-        lua.load(&source)
-            .set_name(path.to_string_lossy())
-            .into_function()
+            // Compila e retorna a função
+            // O mlua/Luau gerencia o cache e o ambiente
+            Ok(lua.load(&source).set_name(path.to_string_lossy()).into_function()?)
+        }));
+
+        match res {
+            Ok(Ok(f)) => Ok(f),
+            Ok(Err(e)) => Err(e),
+            Err(_) => Err(mlua::Error::RuntimeError("internal panics in require loader".to_string())),
+        }
     }
 }
