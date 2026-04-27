@@ -361,6 +361,72 @@ unsafe fn luks_new_impl() -> *mut LuksRuntime {
         return ptr::null_mut();
     }
 
+    // Plan A Plan: embutir wrappers no runtime para expor dlopen/require seguros ao Luau
+    // A ideia é criar globalmente em Lua funções:
+    //   luks_safe_dlopen(path)  -> retorna module ou lança Luau error com location
+    //   luks_safe_require(path) -> idem para require
+    // Prepare a runtime-side wrapper that can trigger a forced failure for debugging.
+    // The flag is read from the environment at compile/runtime initialization in Rust and
+    // exposed to Lua as _G.__luks_debug_force_fail.
+    // Determine if we should force a debug fail for testing/debugging purposes
+    let luks_debug_flag = match std::env::var("LUKS_DEBUG_FORCE_FAIL") {
+        Ok(v) => v == "1" || v.eq_ignore_ascii_case("true"),
+        Err(_) => false,
+    };
+    let wrapper_code = r#"
+        local function luks_safe_dlopen(path)
+            if _G.__luks_debug_force_fail then
+                local info = debug.getinfo(2, 'Sl')
+                local loc = (info.short_src or '') .. ':' .. (info.currentline or 0)
+                error('DEBUG FORCE DLOPEN FAIL at ' .. loc)
+            end
+            local ok, mod, err = pcall(function() return dlopen(path) end)
+            if ok then
+                if mod == nil then
+                    local info = debug.getinfo(2, 'Sl')
+                    local loc = (info.short_src or '') .. ':' .. (info.currentline or 0)
+                    error((err or 'dlopen failed') .. ' at ' .. loc)
+                end
+                return mod
+            else
+                local info = debug.getinfo(2, 'Sl')
+                local loc = (info.short_src or '') .. ':' .. (info.currentline or 0)
+                error((err or 'dlopen failed') .. ' at ' .. loc)
+            end
+        end
+
+        local function luks_safe_require(path)
+            if _G.__luks_debug_force_fail then
+                local info = debug.getinfo(2, 'Sl')
+                local loc = (info.short_src or '') .. ':' .. (info.currentline or 0)
+                error('DEBUG FORCE REQUIRE FAIL at ' .. loc)
+            end
+            local ok, mod, err = pcall(function() return require(path) end)
+            if ok then
+                if mod == nil then
+                    local info = debug.getinfo(2, 'Sl')
+                    local loc = (info.short_src or '') .. ':' .. (info.currentline or 0)
+                    error((err or 'require failed') .. ' at ' .. loc)
+                end
+                return mod
+            else
+                local info = debug.getinfo(2, 'Sl')
+                local loc = (info.short_src or '') .. ':' .. (info.currentline or 0)
+                error((err or 'require failed') .. ' at ' .. loc)
+            end
+        end
+
+        _G.luks_safe_dlopen = luks_safe_dlopen
+        _G.luks_safe_require = luks_safe_require
+        _G.__luks_debug_force_fail = false
+    "#;
+    if let Err(e) = lua.load(wrapper_code).exec() {
+        eprintln!("falha ao carregar wrappers runtime: {}", e);
+    }
+
+    // Propagate the runtime-env flag into Lua so the wrappers can trigger a forced fail
+    let _ = lua.globals().set("__luks_debug_force_fail", luks_debug_flag);
+
     let compiler = Compiler::new().set_optimization_level(1).set_debug_level(1);
     let _ = lua.set_compiler(compiler);
 

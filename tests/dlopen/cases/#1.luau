@@ -7,7 +7,12 @@ return function(expect)
     h.suite("Dlopen Object Passing Tests", function()
 
         h.test("dlopen returns valid module object", function()
-            local mymod = dlopen("@self/../../../target/release/testmodule")
+            local base = __script_dir__ or "."
+            local mymod = dlopen(base .. "/../../../target/release/testmodule")
+            if mymod == nil then
+                -- Fallback: try the original path
+                mymod = dlopen("@self/../../../target/release/testmodule")
+            end
 
             expect.not_nil(mymod, "dlopen should return a module")
             expect.type_(mymod, "table", "module should be a table")
