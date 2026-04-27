@@ -137,17 +137,17 @@ unsafe extern "C-unwind" fn lua_dlopen(l: *mut ffi::lua_State) -> i32 {
 /// Implementação interna de dlopen, isolada para teste e segurança
 unsafe fn lua_dlopen_impl(l: *mut ffi::lua_State) -> i32 {
     if ffi::lua_isstring(l, 1) == 0 {
-        ffi::lua_pushnil(l);
         let msg = ffi_utils::ffi_error_msg("dlopen: argumento 1 deve ser string");
+        ffi::lua_pushnil(l);
         ffi::lua_pushstring(l, msg);
-        drop(CString::from_raw(msg)); // Lua copia a string, então liberamos
+        drop(CString::from_raw(msg)); // Lua copia a string
         return 2;
     }
 
     let arg_ptr = ffi::lua_tostring(l, 1);
     if arg_ptr.is_null() {
-        ffi::lua_pushnil(l);
         let msg = ffi_utils::ffi_error_msg("dlopen: argumento 1 inválido");
+        ffi::lua_pushnil(l);
         ffi::lua_pushstring(l, msg);
         drop(CString::from_raw(msg));
         return 2;
@@ -264,13 +264,19 @@ unsafe fn lua_dlopen_impl(l: *mut ffi::lua_State) -> i32 {
         }
         Ok(false) => {
             // Permissão negada
-            ffi::lua_pushliteral(l, c"Native module loading denied");
-            return 1; // Retorna 1 valor (a string de erro) para o Lua
+            let msg = ffi_utils::ffi_error_msg("dlopen: Native module loading denied");
+            ffi::lua_pushnil(l);
+            ffi::lua_pushstring(l, msg);
+            drop(CString::from_raw(msg));
+            return 2;
         }
         Err(_) => {
             // Panic interno na verificação (Fail-safe)
-            ffi::lua_pushliteral(l, c"dlopen blocked: internal permission error");
-            return 1;
+            let msg = ffi_utils::ffi_error_msg("dlopen blocked: internal permission error");
+            ffi::lua_pushnil(l);
+            ffi::lua_pushstring(l, msg);
+            drop(CString::from_raw(msg));
+            return 2;
         }
     }
 
@@ -280,16 +286,13 @@ unsafe fn lua_dlopen_impl(l: *mut ffi::lua_State) -> i32 {
     match loader.load(&path_str) {
         Ok(export) => export(l),
         Err(e) => {
-            ffi::lua_pushnil(l);
             let sanitized = e.replace('\0', "\\0");
             // Usa ffi_utils para evitar panic em CString::new com null bytes
             let msg = ffi_utils::ffi_error_msg(sanitized);
+            ffi::lua_pushnil(l);
             ffi::lua_pushstring(l, msg);
-            // Nota: msg é alocado via CString::into_raw, mas Lua faz cópia da string.
-            // Para evitar vazamento, precisamos liberar após lua_pushstring copiar.
-            // Como lua_pushstring copia o conteúdo, podemos liberar imediatamente:
             drop(CString::from_raw(msg));
-            2
+            return 2;
         }
     }
 }

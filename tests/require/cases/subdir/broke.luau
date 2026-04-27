@@ -1,0 +1,2 @@
+- -- Intentional syntax error to test loader error path
+- local x = "unterminated string
