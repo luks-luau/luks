@@ -1,10 +1,17 @@
 local M = {}
 
--- Safe wrapper: expects dlopen to return (module, nil) on success or (nil, err) on failure
+-- Safe wrapper: calls dlopen wrapped in pcall and surfaces proper Luau errors with location
 function M.safe_dlopen(path)
-  local mod, err = dlopen(path)
+  local ok, mod, err = pcall(function() return dlopen(path) end)
+  if not ok then
+    -- propagate the inner error as a Luau error
+    error(mod or (err or "dlopen call failed"))
+  end
   if mod == nil then
-    error(err or "dlopen failed without error message")
+    local info = debug.getinfo(2, "Snl")
+    local loc_src = (info and info.short_src) or "<unknown>"
+    local loc_line = (info and info.currentline) or 0
+    error((err or "dlopen failed") .. (" at %s:%d"):format(loc_src, loc_line))
   end
   return mod
 end
