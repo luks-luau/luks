@@ -23,14 +23,9 @@ local colors = {
     reset = "\27[0m"
 }
 
--- List of test cases (explicit to avoid require panic on missing modules)
--- Format: { folder = case_number }
-local test_cases = {
-    { folder = "require", case = 1 },
-    { folder = "require", case = 2 },
-    { folder = "dlopen", case = 1 },
-    { folder = "dlopen", case = 2 },
-}
+-- Auto-discovered test categories.
+local categories = { "require", "dlopen" }
+local test_cases = {}
 
 -- Cache for loaded test cases
 -- Structure: { folder_num = fn }
@@ -64,12 +59,23 @@ print("=========================================")
 print("      Luks Runtime Test Suite")
 print("=========================================")
 
--- Load all test cases into cache
+-- Load all test cases into cache using sequential discovery.
 print("\n>> Loading tests into cache...")
 
-for _, tc in ipairs(test_cases) do
-    local key = tc.folder .. "_" .. tc.case
-    test_cache[key] = load_test_case(tc.folder, tc.case)
+for _, folder in ipairs(categories) do
+    for case_num = 1, 100 do
+        local ok, test_fn_or_err = pcall(function()
+            return load_test_case(folder, case_num)
+        end)
+
+        if not ok then
+            break
+        end
+
+        local key = folder .. "_" .. case_num
+        test_cache[key] = test_fn_or_err
+        table.insert(test_cases, { folder = folder, case = case_num })
+    end
 end
 
 print(string.format("Loaded %d test case(s)", #test_cases))
