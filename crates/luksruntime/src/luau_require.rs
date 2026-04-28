@@ -160,7 +160,11 @@ impl Require for LuksRequirer {
 
     /// Checks whether the current path points to an existing module.
     fn has_module(&self) -> bool {
-        self.find_module().is_some()
+        std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| self.find_module().is_some()))
+            .unwrap_or_else(|_| {
+                crate::utils::runtime_warn("Internal panic in has_module(); returning false");
+                false
+            })
     }
 
     /// Returns the cache key for the current module.
@@ -188,24 +192,27 @@ impl Require for LuksRequirer {
 
     /// Builds and returns the loader function for the current module.
     fn loader(&self, lua: &Lua) -> LuaResult<Function> {
-        let path = self.find_module().ok_or_else(|| {
-            mlua::Error::runtime(format!(
-                "módulo não encontrado: {}",
-                self.current_path.display()
-            ))
-        })?;
-        // Read the module file.
-        let mut file = File::open(&path)
-            .map_err(|e| mlua::Error::runtime(format!("abrir '{}': {}", path.display(), e)))?;
+        std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let path = self.find_module().ok_or_else(|| {
+                mlua::Error::runtime(format!(
+                    "module not found: {}",
+                    self.current_path.display()
+                ))
+            })?;
+            // Read the module file.
+            let mut file = File::open(&path)
+                .map_err(|e| mlua::Error::runtime(format!("open '{}': {}", path.display(), e)))?;
 
-        let mut source = String::new();
-        file.read_to_string(&mut source)
-            .map_err(|e| mlua::Error::runtime(format!("ler '{}': {}", path.display(), e)))?;
+            let mut source = String::new();
+            file.read_to_string(&mut source)
+                .map_err(|e| mlua::Error::runtime(format!("read '{}': {}", path.display(), e)))?;
 
-        // Compile and return the function.
-        // mlua/Luau manages module cache and execution environment.
-        lua.load(&source)
-            .set_name(path.to_string_lossy())
-            .into_function()
+            // Compile and return the function.
+            // mlua/Luau manages module cache and execution environment.
+            lua.load(&source)
+                .set_name(path.to_string_lossy())
+                .into_function()
+        }))
+        .unwrap_or_else(|_| Err(mlua::Error::runtime("internal panic while loading module")))
     }
 }
