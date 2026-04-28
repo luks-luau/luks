@@ -3,16 +3,16 @@ use libloading::{Library, Symbol};
 use std::path::Path;
 use std::sync::Mutex;
 
-/// Tipo do export "luau_export" das bibliotecas carregadas
+/// Type of the `luau_export` entrypoint from loaded libraries.
 pub type LuauExport = unsafe extern "C-unwind" fn(*mut mlua::ffi::lua_State) -> i32;
 
-// Mantém as libraries carregadas em memória para não descarregá-las
-// (o símbolo luau_export precisa permanecer válido)
+// Keep libraries alive for the process lifetime.
+// The `luau_export` symbol must remain valid after lookup.
 use std::sync::LazyLock;
 static LOADED_LIBS: LazyLock<Mutex<Vec<(std::path::PathBuf, Library)>>> =
     LazyLock::new(|| Mutex::new(Vec::new()));
 
-/// Carrega uma biblioteca e retorna o símbolo "luau_export"
+/// Loads a library and returns its `luau_export` symbol.
 pub fn load_export(path: &Path) -> Result<LuauExport, String> {
     let key = canonicalize_or_absolute(path);
 

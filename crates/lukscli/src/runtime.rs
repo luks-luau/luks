@@ -2,6 +2,7 @@ use libloading::Library;
 use std::ffi::CStr;
 use anyhow::{Context, Result};
 
+/// Dynamic handle to the runtime shared library and FFI entrypoints.
 pub struct RuntimeHandle {
     _lib: Library,
     new: unsafe extern "C-unwind" fn() -> *mut std::ffi::c_void,
@@ -13,8 +14,9 @@ pub struct RuntimeHandle {
 }
 
 impl RuntimeHandle {
+    /// Loads the runtime shared library located next to the CLI executable.
     pub fn load() -> Result<Self> {
-        // Busca a biblioteca no diretório do executável do CLI
+        // Find the runtime library in the CLI executable directory.
         let exe_path = std::env::current_exe().context("Failed to get exe path")?;
         let exe_dir = exe_path.parent().context("Failed to get exe dir")?;
 
@@ -33,7 +35,7 @@ impl RuntimeHandle {
 
         let lib = unsafe { Library::new(&lib_path)? };
 
-        // Obter símbolos enquanto lib ainda está emprestado (antes de mover para o struct)
+        // Resolve symbols while `lib` is still borrowed (before moving into struct).
         let new = unsafe { get_symbol(&lib, "luks_new")? };
         let exec = unsafe { get_symbol(&lib, "luks_execute")? };
         let free = unsafe { get_symbol(&lib, "luks_free_error")? };
@@ -52,6 +54,7 @@ impl RuntimeHandle {
         })
     }
 
+    /// Returns `(runtime_version, luau_version)` from the shared library.
     pub fn get_versions(&self) -> Result<(String, String)> {
         unsafe {
             let rt_fn: extern "C-unwind" fn() -> *const i8 = std::mem::transmute(self.version);
@@ -63,6 +66,7 @@ impl RuntimeHandle {
         }
     }
 
+    /// Executes source code with a provided chunk name.
     pub fn execute(&self, source: &str, chunk_name: &str) -> Result<()> {
         let c_src = std::ffi::CString::new(source)?;
         let c_chunk = std::ffi::CString::new(chunk_name)?;
@@ -91,6 +95,6 @@ impl RuntimeHandle {
 
 unsafe fn get_symbol<T: Copy>(lib: &Library, name: &str) -> Result<T> {
     let sym = lib.get::<T>(name.as_bytes())?;
-    // Symbol<T> derefs to T, so *sym gives the function pointer value
+    // `Symbol<T>` dereferences to `T`, so `*sym` yields the function pointer value.
     Ok(*sym)
 }

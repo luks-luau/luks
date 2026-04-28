@@ -3,6 +3,7 @@ use crate::runtime::RuntimeHandle;
 use anyhow::Result;
 
 pub fn run_repl() -> Result<()> {
+    // Load runtime once and reuse it for the whole interactive session.
     let rt = RuntimeHandle::load()?;
     let mut rl = DefaultEditor::new()?;
 
@@ -15,6 +16,7 @@ pub fn run_repl() -> Result<()> {
                 break;
             }
             Ok(line) => {
+                // Persist history and execute each non-control line.
                 rl.add_history_entry(&line)?;
                 if let Err(e) = rt.execute(&line, "<repl>") {
                     eprintln!("[ERR] {}", e);

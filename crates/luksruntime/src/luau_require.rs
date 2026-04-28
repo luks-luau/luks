@@ -4,16 +4,17 @@ use std::io::{self, Read};
 use std::path::{Path, PathBuf};
 use std::result::Result as StdResult;
 
-/// Implementação do trait Require do mlua para o sistema de módulos Luks
+/// `mlua::Require` implementation for the Luks module system.
 ///
-/// Esta struct mantém o estado de navegação durante a resolução de um módulo.
-/// O Luau chama os métodos de navegação (reset, to_parent, to_child) para
-/// construir o caminho do módulo, depois verifica has_module() e chama loader().
+/// This struct stores navigation state while resolving a module path.
+/// Luau calls navigation methods (`reset`, `to_parent`, `to_child`) to build
+/// the target path, then checks `has_module()` and calls `loader()`.
 pub struct LuksRequirer {
-    /// Caminho atual durante a navegação
+    /// Current path while navigating module segments.
     current_path: PathBuf,
-    /// Diretório do script que está fazendo require (de __script_dir__)
+    /// Directory of the script that initiated `require` (`__script_dir__`).
     script_dir: PathBuf,
+    /// Additional roots from `LUKS_REQUIRE_PATH`.
     require_paths: Vec<PathBuf>,
 }
 
@@ -36,12 +37,12 @@ impl LuksRequirer {
         }
     }
 
-    /// Encontra o arquivo de módulo correspondente ao caminho atual.
-    /// Tenta as extensões .luau e .lua, e também init.luau/init.lua para diretórios.
+    /// Finds the module file that matches the current path.
+    /// Tries `.luau` / `.lua` and `init.luau` / `init.lua` for directories.
     fn find_module(&self) -> Option<PathBuf> {
         let base = &self.current_path;
 
-        // Tenta como arquivo com extensão .luau ou .lua
+        // Try as a file with `.luau` or `.lua` extension.
         for ext in ["luau", "lua"] {
             let with_ext = base.with_extension(ext);
             if with_ext.is_file() {
@@ -62,7 +63,7 @@ impl LuksRequirer {
             }
         }
 
-        // Tenta init.luau ou init.lua no diretório
+        // Try `init.luau` or `init.lua` inside the directory.
         for ext in ["luau", "lua"] {
             let init = base.join(format!("init.{}", ext));
             if init.is_file() {
@@ -86,7 +87,7 @@ impl LuksRequirer {
         None
     }
 
-    /// Resolve um caminho de módulo, considerando @self/ e caminhos relativos
+    /// Resolves a module path, including `@self/` and relative paths.
     fn resolve_module_path(&self, input: &str) -> PathBuf {
         crate::path_resolution::resolve_from_base(&self.script_dir, input)
     }
@@ -99,36 +100,36 @@ impl Default for LuksRequirer {
 }
 
 impl Require for LuksRequirer {
-    /// Verifica se require é permitido para o chunk especificado
+    /// Checks whether `require` is allowed for the current runtime policy.
     fn is_require_allowed(&self, chunk_name: &str) -> bool {
         match crate::permissions::check_import_safely() {
-            Ok(true) => true, // Permitido
+            Ok(true) => true, // Allowed.
             Ok(false) => {
                 crate::utils::runtime_warn(&format!(
                     "Permission denied: require('{}')",
                     chunk_name
                 ));
-                false // Bloqueado
+                false // Denied.
             }
             Err(_) => {
                 crate::utils::runtime_warn(&format!(
                     "Internal permission error. Denying require('{}')",
                     chunk_name
                 ));
-                false // Fail-safe: negar em caso de erro interno
+                false // Fail-safe: deny on internal errors.
             }
         }
     }
 
-    /// Reseta o estado para o diretório do chunk que está fazendo require
+    /// Resets state to the directory of the chunk performing `require`.
     fn reset(&mut self, chunk_name: &str) -> StdResult<(), NavigateError> {
         let chunk_name = chunk_name.strip_prefix('@').unwrap_or(chunk_name);
 
-        // Define current_path como o caminho completo do arquivo (não o diretório)
-        // O Luau vai chamar to_parent para navegar para o diretório quando necessário
+        // Set current_path to the file path, not the directory.
+        // Luau will call `to_parent` when directory navigation is needed.
         self.current_path = PathBuf::from(chunk_name);
 
-        // O script_dir é o diretório do chunk (usado para resolver @self/)
+        // script_dir is used to resolve `@self/` aliases.
         self.script_dir = Path::new(chunk_name)
             .parent()
             .map(|p| p.to_path_buf())
@@ -137,13 +138,13 @@ impl Require for LuksRequirer {
         Ok(())
     }
 
-    /// Navega para um alias (caminho absoluto/relativo completo)
+    /// Jumps to an alias path (absolute or fully relative).
     fn jump_to_alias(&mut self, path: &str) -> StdResult<(), NavigateError> {
         self.current_path = self.resolve_module_path(path);
         Ok(())
     }
 
-    /// Navega para o diretório pai
+    /// Moves to parent directory.
     fn to_parent(&mut self) -> StdResult<(), NavigateError> {
         if !self.current_path.as_os_str().is_empty() {
             self.current_path.pop();
@@ -151,21 +152,21 @@ impl Require for LuksRequirer {
         Ok(())
     }
 
-    /// Navega para um subdiretório/nome
+    /// Appends a child segment.
     fn to_child(&mut self, name: &str) -> StdResult<(), NavigateError> {
         self.current_path.push(name);
         Ok(())
     }
 
-    /// Verifica se o caminho atual aponta para um módulo existente
+    /// Checks whether the current path points to an existing module.
     fn has_module(&self) -> bool {
         self.find_module().is_some()
     }
 
-    /// Retorna a chave de cache para o módulo atual
-    /// Usada pelo Luau para cache em package.loaded
+    /// Returns the cache key for the current module.
+    /// Used by Luau for `package.loaded` caching.
     fn cache_key(&self) -> String {
-        // Usa o helper unificado para garantir consistência com dlopen
+        // Use shared helper to keep behavior consistent with `dlopen`.
         let Some(module) = self.find_module() else {
             return self.current_path.to_string_lossy().to_string();
         };
@@ -175,17 +176,17 @@ impl Require for LuksRequirer {
             .to_string()
     }
 
-    /// Verifica se existe configuração no contexto atual (não usado)
+    /// Indicates whether contextual config exists (unused).
     fn has_config(&self) -> bool {
         false
     }
 
-    /// Retorna o conteúdo da configuração (não usado)
+    /// Returns config payload (unused).
     fn config(&self) -> io::Result<Vec<u8>> {
         Err(io::Error::new(io::ErrorKind::NotFound, "no config"))
     }
 
-    /// Cria e retorna a função loader para o módulo atual
+    /// Builds and returns the loader function for the current module.
     fn loader(&self, lua: &Lua) -> LuaResult<Function> {
         let path = self.find_module().ok_or_else(|| {
             mlua::Error::runtime(format!(
@@ -193,7 +194,7 @@ impl Require for LuksRequirer {
                 self.current_path.display()
             ))
         })?;
-        // Lê o arquivo
+        // Read the module file.
         let mut file = File::open(&path)
             .map_err(|e| mlua::Error::runtime(format!("abrir '{}': {}", path.display(), e)))?;
 
@@ -201,8 +202,8 @@ impl Require for LuksRequirer {
         file.read_to_string(&mut source)
             .map_err(|e| mlua::Error::runtime(format!("ler '{}': {}", path.display(), e)))?;
 
-        // Compila e retorna a função
-        // O mlua/Luau gerencia o cache e o ambiente
+        // Compile and return the function.
+        // mlua/Luau manages module cache and execution environment.
         lua.load(&source)
             .set_name(path.to_string_lossy())
             .into_function()

@@ -8,19 +8,19 @@ pub use search::{executable_dir, find_library, system_library_paths};
 use platform::load_export;
 use std::path::PathBuf;
 
-/// Loader de módulos dinâmicos (.dll, .so, .dylib)
+/// Dynamic module loader (`.dll`, `.so`, `.dylib`).
 pub struct ModuleLoader;
 
 impl ModuleLoader {
-    /// Cria um novo loader
+    /// Creates a new loader instance.
     pub fn new() -> Self {
         Self
     }
 
-    /// Carrega um módulo do caminho especificado
+    /// Loads a module from the provided path.
     ///
-    /// NOTA: O processamento de "@self/", prefixo 'lib' e extensão é feito em lib.rs
-    /// Esta função recebe o caminho já completo e pronto.
+    /// NOTE: `@self/`, `lib` prefix, and extension processing happen in `lib.rs`.
+    /// This function expects a fully resolved path.
     pub fn load(&self, path: &str) -> Result<LuauExport, String> {
         let pathbuf = PathBuf::from(path);
         load_export(&pathbuf)

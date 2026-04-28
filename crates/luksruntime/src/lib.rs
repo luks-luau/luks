@@ -18,7 +18,7 @@ pub struct LuksRuntime {
     lua: Lua,
 }
 
-/// Obtém o diretório do script atual da global __script_dir__
+/// Reads the current script directory from the `__script_dir__` global.
 unsafe fn get_script_dir(l: *mut ffi::lua_State) -> Option<std::path::PathBuf> {
     ffi::lua_getglobal(l, b"__script_dir__\0".as_ptr() as *const i8);
     let result = if ffi::lua_isstring(l, -1) != 0 {
@@ -62,7 +62,7 @@ fn extract_source_path(src: &str) -> Option<String> {
     None
 }
 
-/// Obtém o diretório do script chamador inspecionando a stack do Luau.
+/// Gets the caller script directory by inspecting the Luau stack.
 unsafe fn get_caller_script_dir(l: *mut ffi::lua_State) -> Option<std::path::PathBuf> {
     const WHAT_SOURCE: &[u8] = b"s\0";
 
@@ -98,16 +98,17 @@ unsafe fn get_caller_script_dir(l: *mut ffi::lua_State) -> Option<std::path::Pat
     None
 }
 
-/// Função interna dlopen exposta ao Lua
-/// Carrega uma biblioteca dinâmica e chama o luau_export
+/// Internal `dlopen` function exposed to Lua.
+/// Loads a dynamic library and invokes its `luau_export` entrypoint.
 ///
 /// # Safety
-/// Esta função é chamada pela VM Luau e pode levantar erros Lua via lua_error.
-/// O corpo deve evitar panics para não propagar através da fronteira FFI.
+/// This function is called by the Luau VM and may raise Lua errors via
+/// `lua_error`. Its body must avoid Rust panics crossing the FFI boundary.
 unsafe extern "C-unwind" fn lua_dlopen(l: *mut ffi::lua_State) -> i32 {
     lua_dlopen_impl(l)
 }
 
+/// Pushes an error message and raises a Lua error from C API.
 unsafe fn lua_error(l: *mut ffi::lua_State, msg: impl AsRef<str>) -> i32 {
     let sanitized = msg.as_ref().replace('\0', "\\0");
     match CString::new(sanitized) {
@@ -121,7 +122,7 @@ unsafe fn lua_error(l: *mut ffi::lua_State, msg: impl AsRef<str>) -> i32 {
     ffi::lua_error(l)
 }
 
-/// Implementação interna de dlopen, isolada para teste e segurança
+/// Internal `dlopen` implementation, isolated for testability and safety.
 unsafe fn lua_dlopen_impl(l: *mut ffi::lua_State) -> i32 {
     if ffi::lua_isstring(l, 1) == 0 {
         return lua_error(l, "dlopen: argumento 1 deve ser string");
@@ -133,25 +134,25 @@ unsafe fn lua_dlopen_impl(l: *mut ffi::lua_State) -> i32 {
     }
 
     let arg = CStr::from_ptr(arg_ptr).to_string_lossy();
-    // Obtém diretório do chamador (stack), com fallback para a global __script_dir__.
+    // Get caller script directory from stack with fallback to __script_dir__.
     let script_dir = get_caller_script_dir(l).or_else(|| get_script_dir(l));
 
     let base_dir = path_resolution::default_base_dir(script_dir);
 
-    // Determina o diretório base: @self/ ou caminho relativo usa diretório do script
+    // Build the base path: @self/ and relative paths use script directory.
     let raw_path = if path_resolution::is_simple_name(arg.as_ref()) {
-        // Nome simples (sem separadores):
-        // 1. Tenta diretório de script primeiro (com as mesmas variações de nome que serão carregadas)
+        // Simple name (no separators):
+        // 1) Try script directory first with candidate filename variants.
         let script_base = base_dir.clone();
 
         let mut candidates: Vec<std::path::PathBuf> = Vec::new();
         let arg_path = std::path::Path::new(arg.as_ref());
 
         if arg_path.extension().is_some() {
-            // Já tem extensão (ex: foo.dll) -> não adiciona DLL_EXTENSION
+            // Already has extension (e.g. foo.dll), do not append DLL_EXTENSION.
             candidates.push(script_base.join(arg.as_ref()));
         } else {
-            // Candidato "direto" com extensão
+            // Direct candidate with platform extension.
             candidates.push(script_base.join(format!(
                 "{}.{}",
                 arg,
@@ -160,7 +161,7 @@ unsafe fn lua_dlopen_impl(l: *mut ffi::lua_State) -> i32 {
 
             #[cfg(not(windows))]
             {
-                // Em Unix, também tenta com prefixo lib quando apropriado
+                // On Unix, also try `lib` prefix when applicable.
                 if !arg.starts_with("lib") {
                     candidates.push(script_base.join(format!(
                         "lib{}.{}",
@@ -174,10 +175,10 @@ unsafe fn lua_dlopen_impl(l: *mut ffi::lua_State) -> i32 {
         if let Some(found) = candidates.into_iter().find(|p| p.exists()) {
             found
         } else if let Some(system_path) = loader::find_library(&arg) {
-            // 2. Tenta nas pastas do sistema
+            // 2) Search system library directories.
             system_path
         } else {
-            // 3. Fallback: caminho relativo ao script (a extensão será adicionada abaixo)
+            // 3) Fallback to script-relative path (extension applied below).
             script_base.join(arg.as_ref())
         }
     } else {
@@ -186,17 +187,15 @@ unsafe fn lua_dlopen_impl(l: *mut ffi::lua_State) -> i32 {
 
     let path = path_resolution::normalize_path(&path_resolution::with_platform_library_extension(&raw_path));
 
-    // Verificar permissão NATIVE com proteção contra panic
+    // Check NATIVE permission with panic-safe wrapper.
     match crate::permissions::check_native_safely() {
-        Ok(true) => {
-            // Permissão concedida, segue o fluxo normal
-        }
+        Ok(true) => {}
         Ok(false) => {
-            // Permissão negada
+            // Permission denied.
             return lua_error(l, "Native module loading denied");
         }
         Err(_) => {
-            // Panic interno na verificação (Fail-safe)
+            // Internal panic in permission check (fail-safe denial).
             return lua_error(l, "dlopen blocked: internal permission error");
         }
     }
@@ -210,9 +209,9 @@ unsafe fn lua_dlopen_impl(l: *mut ffi::lua_State) -> i32 {
     }
 }
 
-/// Registra a função dlopen no estado Lua
+/// Registers the `dlopen` function into the Lua state.
 fn register_dlopen(lua: &Lua) -> LuaResult<()> {
-    // Usa exec_raw para acessar a FFI bruta de forma controlada
+    // Use `exec_raw` for controlled access to the raw Lua C API state.
     unsafe {
         lua.exec_raw((), |state| {
             ffi::lua_pushcfunction(state, lua_dlopen);
@@ -226,11 +225,11 @@ pub unsafe extern "C-unwind" fn luks_new() -> *mut LuksRuntime {
     ffi_utils::ffi_catch_unwind(|| luks_new_impl()).unwrap_or(ptr::null_mut())
 }
 
-/// Implementação segura de luks_new, isolada para catch_unwind
+/// Safe implementation of `luks_new`, isolated for `catch_unwind`.
 unsafe fn luks_new_impl() -> *mut LuksRuntime {
     let lua = unsafe { Lua::unsafe_new() };
 
-    // Configura o require nativo do Luau usando nosso trait Require
+    // Configure Luau's native require using our `Require` trait implementation.
     let requirer = luau_require::LuksRequirer::new();
     let luau_require_fn = match lua.create_require_function(requirer) {
         Ok(f) => f,
@@ -240,8 +239,8 @@ unsafe fn luks_new_impl() -> *mut LuksRuntime {
         }
     };
 
-    // Cria wrapper que adiciona ./ a caminhos sem prefixo válido
-    // Isso mantém compatibilidade com código que faz require("modulo") em vez de require("./modulo")
+    // Create a wrapper that adds `./` to paths without an explicit prefix.
+    // This preserves compatibility with code calling `require("module")`.
     let require_wrapper =
         lua.create_function(move |_lua, module: String| -> mlua::Result<mlua::Value> {
             let adjusted_path =
@@ -249,7 +248,7 @@ unsafe fn luks_new_impl() -> *mut LuksRuntime {
                 {
                     module
                 } else {
-                    // Adiciona ./ para caminhos sem prefixo (relativo ao diretório do script)
+                    // Add `./` for prefixless paths (relative to script directory).
                     format!("./{}", module)
                 };
             luau_require_fn.call::<mlua::Value>(adjusted_path)
@@ -268,7 +267,7 @@ unsafe fn luks_new_impl() -> *mut LuksRuntime {
         }
     }
 
-    // Registra dlopen
+    // Register `dlopen` global.
     if let Err(e) = register_dlopen(&lua) {
         crate::utils::runtime_warn(&format!("failed to register dlopen: {}", e));
         return ptr::null_mut();
@@ -290,7 +289,7 @@ pub unsafe extern "C-unwind" fn luks_execute(
         .unwrap_or(ptr::null_mut())
 }
 
-/// Implementação interna de luks_execute com tratamento seguro de erros
+/// Internal `luks_execute` implementation with safe error handling.
 unsafe fn luks_execute_impl(
     rt: *mut LuksRuntime,
     source: *const i8,
@@ -317,7 +316,7 @@ unsafe fn luks_execute_impl(
         }
     };
 
-    // Define __script_dir__ para @self/ funcionar corretamente
+    // Set `__script_dir__` so `@self/` path resolution works correctly.
     let name_path = name_str.strip_prefix('@').unwrap_or(name_str);
     let script_dir = std::path::Path::new(name_path)
         .parent()
@@ -333,7 +332,7 @@ unsafe fn luks_execute_impl(
 
 #[no_mangle]
 pub unsafe extern "C-unwind" fn luks_free_error(err: *mut i8) {
-    // Não precisa de catch_unwind: drop de CString não pode panicar em condições normais
+    // No catch_unwind needed: dropping CString should not panic in normal conditions.
     if !err.is_null() {
         drop(CString::from_raw(err));
     }
@@ -350,20 +349,20 @@ pub unsafe extern "C-unwind" fn luks_clear_loaded_libs() -> *mut i8 {
 
 #[no_mangle]
 pub unsafe extern "C-unwind" fn luks_destroy(rt: *mut LuksRuntime) {
-    // Não precisa de catch_unwind: drop de Box não pode panicar
+    // No catch_unwind needed: dropping Box should not panic.
     if !rt.is_null() {
         drop(Box::from_raw(rt));
     }
 }
 
-/// Retorna a versão do runtime (obtida do Cargo.toml em tempo de compilação)
+/// Returns runtime version from `Cargo.toml` at compile time.
 #[no_mangle]
 pub unsafe extern "C-unwind" fn luks_version() -> *const c_char {
     const VER: &[u8] = concat!(env!("CARGO_PKG_VERSION"), "\0").as_bytes();
     VER.as_ptr() as *const c_char
 }
 
-/// Retorna a versão da VM Luau atualmente vinculada (dinâmica, sem hardcode)
+/// Returns the linked Luau VM version (dynamic, no hardcoded value).
 #[no_mangle]
 pub unsafe extern "C-unwind" fn luks_luau_version() -> *const c_char {
     use std::sync::OnceLock;
@@ -371,7 +370,7 @@ pub unsafe extern "C-unwind" fn luks_luau_version() -> *const c_char {
 
     static LUAU_VER: OnceLock<CString> = OnceLock::new();
     LUAU_VER.get_or_init(|| {
-        // mlua_sys::luau_version retorna Option<&'static str>
+        // `mlua_sys::luau_version` returns `Option<&'static str>`.
         let ver = mlua_sys::luau_version().unwrap_or("unknown");
         CString::new(ver).expect("Luau version string contained null byte")
     }).as_ptr()
