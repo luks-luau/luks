@@ -122,10 +122,10 @@ mod tests {
         // CString::new falha com null byte interior
         let ptr = ffi_error_msg("hello\0world");
         unsafe {
-            // Deve retornar fallback, não panicar
+            // Deve sanitizar null byte interior sem panicar
             assert!(!ptr.is_null());
             let s = CStr::from_ptr(ptr).to_str().unwrap();
-            assert!(s.contains("error") || s.contains("invalid"));
+            assert_eq!(s, "hello\\0world");
             drop(CString::from_raw(ptr));
         }
     }
