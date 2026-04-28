@@ -39,6 +39,26 @@ return function(expect)
             expect.type_(mod.add, "function", "Function should be accessible")
         end)
 
+        h.test("require missing module raises luau error (pcall)", function()
+            local ok, err = pcall(function()
+                return require("./subdir/module_that_does_not_exist")
+            end)
+
+            expect.false_(ok, "pcall should capture require missing-module error")
+            expect.not_nil(err, "pcall should return an error value")
+            expect.type_(tostring(err), "string", "pcall error should be printable")
+        end)
+
+        h.test("require syntax error raises luau error (pcall)", function()
+            local ok, err = pcall(function()
+                return require("./subdir/bad_syntax")
+            end)
+
+            expect.false_(ok, "pcall should capture require syntax error")
+            expect.not_nil(err, "pcall should return an error value")
+            expect.type_(tostring(err), "string", "pcall error should be printable")
+        end)
+
     end)
 
     return true
