@@ -1,21 +1,21 @@
-//! Utilitários para segurança em fronteiras FFI
+//! Utilities for FFI boundary safety
 //!
-//! Este módulo fornece helpers para converter erros Rust em retornos C seguros,
-//! garantindo que panics nunca escapem para código não-Rust.
+//! This module provides helpers to convert Rust errors into safe C returns,
+//! ensuring panics never escape into non-Rust code.
 
 use std::ffi::CString;
 use std::panic::{self, AssertUnwindSafe};
 use std::ptr;
 
-/// Converte um Result<String, E> em *mut i8 seguro para FFI
+/// Converts a `Result<T, E>` into an FFI-safe C string pointer.
 ///
-/// - Ok(String) → CString alocado (caller deve usar luks_free_error)
-/// - Err(_) → null ptr
-/// - Panic interno → null ptr (nunca vaza)
+/// - `Ok(T)` -> allocated `CString` (caller must use `luks_free_error`)
+/// - `Err(_)` -> null pointer
+/// - internal panic -> null pointer (never unwinds across FFI)
 ///
 /// # Safety
-/// O caller é responsável por liberar a string retornada com `luks_free_error`
-/// quando não for null.
+/// The caller is responsible for freeing the returned string with
+/// `luks_free_error` when it is not null.
 pub fn ffi_string_result<T: ToString, E: ToString>(
     result: Result<T, E>,
 ) -> *mut std::os::raw::c_char {
@@ -23,28 +23,28 @@ pub fn ffi_string_result<T: ToString, E: ToString>(
         Ok(val) => {
             match CString::new(val.to_string()) {
                 Ok(cstr) => cstr.into_raw(),
-                Err(_) => ptr::null_mut(), // Interior null: retorna null seguro
+                Err(_) => ptr::null_mut(), // Interior null byte: safe null fallback
             }
         }
         Err(_) => ptr::null_mut(),
     }
 }
 
-/// Wrapper seguro para executar lógica que pode panicar em fronteiras FFI
+/// Safe wrapper for logic that may panic at FFI boundaries.
 ///
-/// Captura panics e converte para None, evitando undefined behavior.
-/// Usa AssertUnwindSafe internamente para lidar com tipos que contêm UnsafeCell
-/// (como os usados pelo mlua).
+/// Catches panics and converts them to `None`, avoiding undefined behavior.
+/// Uses `AssertUnwindSafe` to handle types that contain `UnsafeCell`
+/// (such as internal `mlua` structures).
 ///
-/// Retorna Some(valor) se sucesso, ou None se houve panic.
+/// Returns `Some(value)` on success, or `None` on panic.
 ///
 /// # Example
 /// ```ignore
 /// #[no_mangle]
-/// pub unsafe extern "C-unwind" fn minha_funcao() -> *mut i8 {
+/// pub unsafe extern "C-unwind" fn my_function() -> *mut i8 {
 ///     ffi_catch_unwind(|| {
-///         // lógica que pode panicar
-///         Some(CString::new("sucesso")?.into_raw())
+///         // logic that may panic
+///         Some(CString::new("success")?.into_raw())
 ///     }).unwrap_or(ptr::null_mut())
 /// }
 /// ```
@@ -52,24 +52,24 @@ pub fn ffi_catch_unwind<F, R>(f: F) -> Option<R>
 where
     F: FnOnce() -> R,
 {
-    // AssertUnwindSafe diz ao compilador: "Eu sei que há UnsafeCell aqui,
-    // mas vou lidar com o panic de forma segura (retornando None)".
+    // AssertUnwindSafe tells the compiler that unwind-safety is handled here
+    // by converting panic into `None`.
     match panic::catch_unwind(AssertUnwindSafe(f)) {
         Ok(res) => Some(res),
         Err(_) => None,
     }
 }
 
-/// Helper específico para funções que retornam *mut i8 (C strings)
+/// Specialized helper for functions that return `*mut i8` (C strings).
 ///
-/// Converte Result<String, String> em *mut i8 com tratamento seguro de erros.
-/// Retorna null em caso de panic ou erro.
+/// Converts `Result<String, String>` into `*mut i8` with safe error handling.
+/// Returns null on panic or error.
 pub fn ffi_cstring_result(result: Result<String, String>) -> *mut std::os::raw::c_char {
     ffi_catch_unwind(|| {
         match result {
             Ok(msg) => match CString::new(msg) {
                 Ok(cstr) => cstr.into_raw(),
-                Err(_) => ptr::null_mut(), // Interior null = null seguro
+                Err(_) => ptr::null_mut(), // Interior null byte = safe null fallback
             },
             Err(_) => ptr::null_mut(),
         }
@@ -77,16 +77,16 @@ pub fn ffi_cstring_result(result: Result<String, String>) -> *mut std::os::raw::
     .unwrap_or(ptr::null_mut())
 }
 
-/// Converte uma mensagem de erro em CString seguro, com fallback
-/// Nunca retorna null - sempre aloca uma string válida
+/// Converts an error message to a safe CString with fallback.
+/// Never returns null; always allocates a valid string.
 pub fn ffi_error_msg(msg: impl ToString) -> *mut std::os::raw::c_char {
     let s = msg.to_string();
-    // Sanitiza null bytes que fariam CString::new falhar
+    // Sanitize null bytes that would make CString::new fail.
     let sanitized = s.replace('\0', "\\0");
     match CString::new(sanitized) {
         Ok(cstr) => cstr.into_raw(),
         Err(_) => {
-            // Fallback absoluto: esta string é garantida sem nulls
+            // Absolute fallback: this string is guaranteed to have no nulls.
             CString::new("internal error").unwrap().into_raw()
         }
     }
@@ -105,7 +105,7 @@ mod tests {
             assert!(!ptr.is_null());
             let s = CStr::from_ptr(ptr).to_str().unwrap();
             assert_eq!(s, "hello");
-            // Limpar memória alocada
+            // Free allocated memory.
             drop(CString::from_raw(ptr));
         }
     }
@@ -119,10 +119,10 @@ mod tests {
 
     #[test]
     fn test_ffi_error_msg_with_null_byte() {
-        // CString::new falha com null byte interior
+        // CString::new fails with interior null bytes.
         let ptr = ffi_error_msg("hello\0world");
         unsafe {
-            // Deve sanitizar null byte interior sem panicar
+            // Must sanitize interior null bytes without panicking.
             assert!(!ptr.is_null());
             let s = CStr::from_ptr(ptr).to_str().unwrap();
             assert_eq!(s, "hello\\0world");
