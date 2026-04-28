@@ -67,11 +67,17 @@ jobs:
     - name: Build for target
       run: cargo build --release --target ${{ matrix.target }}
 
-    - name: Strip binaries (Unix)
-      if: runner.os != 'Windows'
+    - name: Strip binaries (Linux)
+      if: runner.os == 'Linux'
       run: |
         strip target/${{ matrix.target }}/release/${{ matrix.cli_binary }}
         strip target/${{ matrix.target }}/release/${{ matrix.runtime_lib }}
+
+    - name: Strip binaries (macOS)
+      if: runner.os == 'macOS'
+      run: |
+        strip target/${{ matrix.target }}/release/${{ matrix.cli_binary }}
+        strip -x target/${{ matrix.target }}/release/${{ matrix.runtime_lib }} || true
 
     - name: Upload CLI artifact
       uses: actions/upload-artifact@v4
