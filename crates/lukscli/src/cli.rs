@@ -10,22 +10,22 @@ use std::path::PathBuf;
     allow_hyphen_values = true,
 )]
 pub struct Cli {
-    /// Mostra a versão do CLI, Runtime e VM
+    /// Shows CLI, Runtime, and VM versions.
     #[arg(short = 'v', long = "version", global = true, action = clap::ArgAction::SetTrue)]
     pub show_version: bool,
 
-    /// Mostra a ajuda
+    /// Shows help output.
     #[arg(short = 'h', long = "help", global = true, action = clap::ArgAction::SetTrue)]
     pub show_help: bool,
 
-    /// Arquivo/código para execução rápida (fallback legacy)
+    /// File/code for quick execution (legacy fallback).
     #[arg(trailing_var_arg = true)]
     pub trailing: Vec<String>,
 
     #[command(subcommand)]
     pub command: Option<Commands>,
 
-    // Flags Globais (Allow-by-Default -> Deny Flags)
+    // Global flags (allow-by-default model with deny flags).
     #[arg(long, global = true)] pub no_read: bool,
     #[arg(long, global = true)] pub no_native: bool,
     #[arg(long, global = true)] pub no_import: bool,
@@ -34,22 +34,22 @@ pub struct Cli {
 
 #[derive(Subcommand, Clone, Debug)]
 pub enum Commands {
-    /// Executa um script Luau
+    /// Runs a Luau script.
     #[command(alias = "r")]
     Run { path: PathBuf },
 
-    /// Avalia uma expressão Luau (one-shot)
+    /// Evaluates one-shot Luau code.
     Eval { #[arg(short, long)] code: String },
 
-    /// Mostra versões
+    /// Shows versions.
     #[command(alias = "v")]
     Version,
 
-    /// Mostra ajuda
+    /// Shows help.
     #[command(alias = "h")]
     Help,
 
-    /// REPL interativo (usado internamente para fallback)
+    /// Interactive REPL (used internally for fallback mode).
     #[command(hide = true)]
     Repl,
 }
