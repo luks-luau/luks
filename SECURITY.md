@@ -10,7 +10,7 @@ If you intend to execute third-party or untrusted code, you MUST use operating s
 | Layer | Responsibility | Example Configuration |
 |--------|----------------|-------------------------|
 | **Operating System** | Non-root users, `no-new-privileges`, `--read-only` FS, cgroups | Docker: `--user 1000:1000 --read-only --memory=512m` |
-| **Host Runtime (luks-luau)** | Granular control of I/O and native modules | Flags `--allow-read`, `--allow-native`, `--allow-import` |
+| **Host Runtime (luks-luau)** | Granular control of I/O and native modules | Flags `--no-read`, `--no-native`, `--no-import`, `--strict` |
 | **Luau VM (mlua 0.11.6)** | Execution limits, stdlib sandboxing, type checking | `LuauOptions { sandboxed: true }`, `set_instruction_limit()`, `set_sandbox_mode()` |
 | **Host Application** | Input validation, module whitelisting, audit logging | Bytecode signature verification, rate limiting |
 
@@ -24,8 +24,9 @@ If you intend to execute third-party or untrusted code, you MUST use operating s
 ## 📜 Runtime Permissions
 | Flag | Behavior |
 |------|---------------|
-| `--allow-read` | Allows reading scripts and modules from disk |
-| `--allow-native` | Allows dynamic loading of libraries (`dlopen`) |
-| `--allow-import` | Allows `require`/`import` between Luau modules |
+| `--no-read` | Denies reading scripts and modules from disk |
+| `--no-native` | Denies dynamic loading of libraries (`dlopen`) |
+| `--no-import` | Denies `require`/`import` between Luau modules |
+| `--strict` | Deny-by-default mode (`ALLOW_*` env vars become required) |
 
-*Note: The current model operates in "developer trust" mode (flags enabled by default in CLI for compatibility). Future builds will allow locking defaults via `env` or `config`.*
+*Note: The current CLI is allow-by-default with deny flags. For stronger restriction use `--strict` plus explicit `LUKS_ALLOW_*` environment variables.*

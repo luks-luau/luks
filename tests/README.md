@@ -17,7 +17,9 @@ tests/
 │       └── mod.luau         # Helper module for tests
 └── dlopen/
     ├── cases/
-    │   └── #1.luau          # Object passing tests
+    │   ├── #1.luau          # Object passing + dlopen error tests (pcall)
+    │   ├── #2.luau          # @self semantics tests
+    │   └── self/            # Fixtures for @self cases
     └── object_receiver.luau # Helper for dlopen tests
 ```
 
@@ -65,4 +67,4 @@ Colors:
 
 ## Notes
 
-- **pcall with require**: pcall still doesn't catch errors from requiring non-existent modules (causes panic in Rust). Use the explicit test_cases list in main.luau as a workaround.
+- All `dlopen` calls in tests are wrapped in `pcall` so missing libraries do not abort the full suite.

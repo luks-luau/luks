@@ -88,33 +88,7 @@ impl LuksRequirer {
 
     /// Resolve um caminho de módulo, considerando @self/ e caminhos relativos
     fn resolve_module_path(&self, input: &str) -> PathBuf {
-        // Se começa com @self/, resolve relativo ao script_dir
-        if let Some(rest) = input
-            .strip_prefix("@self/")
-            .or_else(|| input.strip_prefix("@self\\"))
-        {
-            return self.script_dir.join(rest);
-        }
-        if input == "@self" {
-            return self.script_dir.clone();
-        }
-
-        let p = Path::new(input);
-
-        // Caminho relativo explícito: resolve relativo ao script_dir
-        if input.starts_with("./")
-            || input.starts_with("../")
-            || input.starts_with(".\\")
-            || input.starts_with("..\\")
-        {
-            self.script_dir.join(p)
-        } else if p.is_absolute() {
-            // Caminho absoluto
-            p.to_path_buf()
-        } else {
-            // Nome simples: tenta relativo ao script_dir primeiro
-            self.script_dir.join(p)
-        }
+        crate::path_resolution::resolve_from_base(&self.script_dir, input)
     }
 }
 
@@ -127,17 +101,20 @@ impl Default for LuksRequirer {
 impl Require for LuksRequirer {
     /// Verifica se require é permitido para o chunk especificado
     fn is_require_allowed(&self, chunk_name: &str) -> bool {
-        // Tenta verificar a permissão de forma segura com proteção contra panic
-        match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            crate::permissions::Permissions::current().check_import()
-        })) {
+        match crate::permissions::check_import_safely() {
             Ok(true) => true, // Permitido
             Ok(false) => {
-                eprintln!("[LUKS] Permission Denied: require('{}')", chunk_name);
+                crate::utils::runtime_warn(&format!(
+                    "Permission denied: require('{}')",
+                    chunk_name
+                ));
                 false // Bloqueado
             }
             Err(_) => {
-                eprintln!("[LUKS] Internal Error: Permission check panicked. Denying access to '{}'.", chunk_name);
+                crate::utils::runtime_warn(&format!(
+                    "Internal permission error. Denying require('{}')",
+                    chunk_name
+                ));
                 false // Fail-safe: negar em caso de erro interno
             }
         }
@@ -193,7 +170,7 @@ impl Require for LuksRequirer {
             return self.current_path.to_string_lossy().to_string();
         };
 
-        crate::utils::canonicalize_or_absolute(&module)
+        crate::path_resolution::canonicalize_or_absolute(&module)
             .to_string_lossy()
             .to_string()
     }

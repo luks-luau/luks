@@ -24,6 +24,7 @@ fn main() -> Result<()> {
     if cli.strict { std::env::set_var("LUKS_STRICT", "1"); }
     if cli.no_read { std::env::set_var("LUKS_DENY_READ", "1"); }
     if cli.no_native { std::env::set_var("LUKS_DENY_NATIVE", "1"); }
+    if cli.no_import { std::env::set_var("LUKS_DENY_IMPORT", "1"); }
 
     // Resolução de Comando (Fallback Legacy)
     let cmd = match cli.command {

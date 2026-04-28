@@ -28,6 +28,7 @@ pub struct Cli {
     // Flags Globais (Allow-by-Default -> Deny Flags)
     #[arg(long, global = true)] pub no_read: bool,
     #[arg(long, global = true)] pub no_native: bool,
+    #[arg(long, global = true)] pub no_import: bool,
     #[arg(long, global = true)] pub strict: bool,
 }
 

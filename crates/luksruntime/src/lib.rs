@@ -2,37 +2,15 @@ use mlua::ffi;
 use mlua::{Compiler, Lua, Result as LuaResult};
 use std::ffi::{CStr, CString};
 use std::os::raw::c_char;
-use std::path::PathBuf;
 use std::ptr;
 
 pub mod ffi_utils;
 pub mod permissions;
 pub use permissions::Permissions;
 
-/// Normaliza um caminho removendo componentes . e ..
-fn normalize_path(path: &std::path::Path) -> PathBuf {
-    let mut result = PathBuf::new();
-    for component in path.components() {
-        match component {
-            std::path::Component::Prefix(p) => result.push(p.as_os_str()),
-            std::path::Component::RootDir => {
-                result.push(component.as_os_str());
-            }
-            std::path::Component::CurDir => { /* ignora . */ }
-            std::path::Component::ParentDir => {
-                // Remove o último componente se houver
-                if result.file_name().is_some() {
-                    result.pop();
-                }
-            }
-            std::path::Component::Normal(c) => result.push(c),
-        }
-    }
-    result
-}
-
 pub mod loader;
 pub mod luau_require;
+pub mod path_resolution;
 pub mod utils;
 
 #[repr(C)]
@@ -158,32 +136,13 @@ unsafe fn lua_dlopen_impl(l: *mut ffi::lua_State) -> i32 {
     // Obtém diretório do chamador (stack), com fallback para a global __script_dir__.
     let script_dir = get_caller_script_dir(l).or_else(|| get_script_dir(l));
 
+    let base_dir = path_resolution::default_base_dir(script_dir);
+
     // Determina o diretório base: @self/ ou caminho relativo usa diretório do script
-    let raw_path = if let Some(rest) = arg
-        .strip_prefix("@self/")
-        .or_else(|| arg.strip_prefix("@self\\"))
-    {
-        // Resolve relativo ao diretório do script em execução
-        let base = script_dir.unwrap_or_else(|| {
-            std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."))
-        });
-        base.join(rest)
-    } else if arg.starts_with("./")
-        || arg.starts_with("../")
-        || arg.starts_with(".\\")
-        || arg.starts_with("..\\")
-    {
-        // Caminho relativo explícito: resolve relativo ao diretório do script
-        let base = script_dir.unwrap_or_else(|| {
-            std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."))
-        });
-        base.join(arg.as_ref())
-    } else if !arg.contains('/') && !arg.contains('\\') {
+    let raw_path = if path_resolution::is_simple_name(arg.as_ref()) {
         // Nome simples (sem separadores):
         // 1. Tenta diretório de script primeiro (com as mesmas variações de nome que serão carregadas)
-        let script_base = script_dir.clone().unwrap_or_else(|| {
-            std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."))
-        });
+        let script_base = base_dir.clone();
 
         let mut candidates: Vec<std::path::PathBuf> = Vec::new();
         let arg_path = std::path::Path::new(arg.as_ref());
@@ -222,44 +181,13 @@ unsafe fn lua_dlopen_impl(l: *mut ffi::lua_State) -> i32 {
             script_base.join(arg.as_ref())
         }
     } else {
-        // Caminho absoluto ou já qualificado
-        let p = std::path::Path::new(arg.as_ref());
-        if p.is_absolute() {
-            p.to_path_buf()
-        } else {
-            // Se for um caminho relativo com separadores (ex: plugins/foo), resolve relativo ao script
-            // para evitar depender do CWD do processo.
-            let base = script_dir.unwrap_or_else(|| {
-                std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."))
-            });
-            base.join(p)
-        }
+        path_resolution::resolve_from_base(&base_dir, arg.as_ref())
     };
 
-    // Adiciona prefixo 'lib' no Linux/macOS se não tiver extensão e não começar com 'lib'
-    let mut path = raw_path.clone();
-    if path.extension().is_none() {
-        #[cfg(not(windows))]
-        {
-            if let Some(filename) = path.file_name() {
-                let name = filename.to_string_lossy();
-                if !name.starts_with("lib") {
-                    path.set_file_name(format!("lib{}", name));
-                }
-            }
-        }
-        path.set_extension(std::env::consts::DLL_EXTENSION);
-    }
-
-    // Normaliza o caminho removendo . e ..
-    let path = normalize_path(&path);
+    let path = path_resolution::normalize_path(&path_resolution::with_platform_library_extension(&raw_path));
 
     // Verificar permissão NATIVE com proteção contra panic
-    let perm_check = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        crate::permissions::Permissions::current().check_native()
-    }));
-
-    match perm_check {
+    match crate::permissions::check_native_safely() {
         Ok(true) => {
             // Permissão concedida, segue o fluxo normal
         }
@@ -307,7 +235,7 @@ unsafe fn luks_new_impl() -> *mut LuksRuntime {
     let luau_require_fn = match lua.create_require_function(requirer) {
         Ok(f) => f,
         Err(e) => {
-            eprintln!("create_require_function falhou: {}", e);
+            crate::utils::runtime_warn(&format!("create_require_function failed: {}", e));
             return ptr::null_mut();
         }
     };
@@ -330,19 +258,19 @@ unsafe fn luks_new_impl() -> *mut LuksRuntime {
     match require_wrapper {
         Ok(f) => {
             if let Err(e) = lua.globals().set("require", f) {
-                eprintln!("falha ao registrar require: {}", e);
+                crate::utils::runtime_warn(&format!("failed to register require: {}", e));
                 return ptr::null_mut();
             }
         }
         Err(e) => {
-            eprintln!("falha ao criar require wrapper: {}", e);
+            crate::utils::runtime_warn(&format!("failed to create require wrapper: {}", e));
             return ptr::null_mut();
         }
     }
 
     // Registra dlopen
     if let Err(e) = register_dlopen(&lua) {
-        eprintln!("falha ao registrar dlopen: {}", e);
+        crate::utils::runtime_warn(&format!("failed to register dlopen: {}", e));
         return ptr::null_mut();
     }
 

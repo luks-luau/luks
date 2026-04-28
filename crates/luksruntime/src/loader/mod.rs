@@ -1,4 +1,3 @@
-mod cache;
 mod platform;
 pub mod search;
 
@@ -6,22 +5,16 @@ pub use platform::clear_loaded_libs;
 pub use platform::LuauExport;
 pub use search::{executable_dir, find_library, system_library_paths};
 
-use cache::ModuleCache;
 use platform::load_export;
 use std::path::PathBuf;
 
 /// Loader de módulos dinâmicos (.dll, .so, .dylib)
-pub struct ModuleLoader {
-    #[allow(dead_code)]
-    cache: ModuleCache, // TODO: Implementar cache real de handles
-}
+pub struct ModuleLoader;
 
 impl ModuleLoader {
-    /// Cria um novo loader com cache vazio
+    /// Cria um novo loader
     pub fn new() -> Self {
-        Self {
-            cache: ModuleCache::new(),
-        }
+        Self
     }
 
     /// Carrega um módulo do caminho especificado
