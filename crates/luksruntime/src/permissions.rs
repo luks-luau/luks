@@ -6,24 +6,24 @@ pub struct Permissions {
 }
 
 impl Permissions {
-    /// Lê configurações de permissão do ambiente.
-    /// - Modo padrão: Allow-by-Default (tudo liberado)
-    /// - Modo Strict: Deny-by-Default (requer ALLOW_* explícito)
-    /// - Flags DENY_* têm precedência sobre allow-by-default
+    /// Reads runtime permissions from environment variables.
+    /// - Default mode: allow-by-default (everything enabled)
+    /// - Strict mode: deny-by-default (explicit `ALLOW_*` required)
+    /// - `DENY_*` flags override allow-by-default behavior
     pub fn current() -> Self {
         let strict = std::env::var("LUKS_STRICT")
             .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
             .unwrap_or(false);
 
         if strict {
-            // Sandbox: negado por padrão, requer ALLOW_* explícito
+            // Strict mode: deny by default, explicit `ALLOW_*` required.
             Permissions {
                 allow_read: std::env::var("LUKS_ALLOW_READ").is_ok(),
                 allow_native: std::env::var("LUKS_ALLOW_NATIVE").is_ok(),
                 allow_import: std::env::var("LUKS_ALLOW_IMPORT").is_ok(),
             }
         } else {
-            // Dev: permitido por padrão, mas DENY_* bloqueia
+            // Dev mode: allow by default, `DENY_*` can block capabilities.
             Permissions {
                 allow_read: std::env::var("LUKS_DENY_READ").is_err(),
                 allow_native: std::env::var("LUKS_DENY_NATIVE").is_err(),
@@ -37,6 +37,7 @@ impl Permissions {
     pub fn check_import(&self) -> bool { self.allow_import }
 }
 
+/// Checks native-loading permission and converts panics into errors.
 pub fn check_native_safely() -> Result<bool, &'static str> {
     std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         Permissions::current().check_native()
@@ -44,6 +45,7 @@ pub fn check_native_safely() -> Result<bool, &'static str> {
     .map_err(|_| "internal permission error")
 }
 
+/// Checks module-import permission and converts panics into errors.
 pub fn check_import_safely() -> Result<bool, &'static str> {
     std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         Permissions::current().check_import()
