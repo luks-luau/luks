@@ -57,11 +57,16 @@ jobs:
     - name: Build release
       run: cargo build --release --verbose
 
-    - name: Run Luau test suite
+    - name: Run Luau test suite (Windows)
+      if: runner.os == 'Windows'
+      shell: pwsh
       run: |
-        if [ "$RUNNER_OS" == "Windows" ]; then
-          ./target/release/lukscli.exe ./tests/main.luau
-        else
-          ./target/release/lukscli ./tests/main.luau
-        fi
+        Get-ChildItem -Path .\target\release -Filter "luks*" | Format-Table -AutoSize
+        Get-ChildItem -Path .\target\release -Filter "testmodule*" | Format-Table -AutoSize
+        .\target\release\lukscli.exe .\tests\main.luau
+
+    - name: Run Luau test suite (Unix)
+      if: runner.os != 'Windows'
       shell: bash
+      run: |
+        ./target/release/lukscli ./tests/main.luau
