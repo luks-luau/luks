@@ -54,6 +54,24 @@ return function(expect)
             expect.eq(passed_result, "Greetings from Rust!", "method should work on passed object")
         end)
 
+        h.test("dlopen invalid argument raises luau error (pcall)", function()
+            local ok, err = pcall(function()
+                dlopen(123)
+            end)
+
+            expect.false_(ok, "pcall should capture dlopen argument error")
+            expect.not_nil(err, "pcall should return an error value")
+        end)
+
+        h.test("dlopen missing library raises luau error (pcall)", function()
+            local ok, err = pcall(function()
+                dlopen("@self/../../../target/release/module_that_does_not_exist")
+            end)
+
+            expect.false_(ok, "pcall should capture dlopen load failure")
+            expect.not_nil(err, "pcall should return an error value")
+        end)
+
     end)
 
     return true
