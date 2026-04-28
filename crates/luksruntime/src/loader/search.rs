@@ -4,22 +4,22 @@ use std::path::PathBuf;
 #[cfg(target_os = "linux")]
 use std::sync::LazyLock;
 
-/// Retorna as pastas de biblioteca do sistema para a plataforma atual
+/// Returns system library directories for the current platform.
 pub fn system_library_paths() -> Vec<PathBuf> {
     let mut paths = Vec::new();
 
     #[cfg(target_os = "windows")]
     {
-        // Windows: System32 e SysWOW64
+        // Windows: System32 and SysWOW64.
         if let Ok(system_root) = env::var("SystemRoot") {
             paths.push(PathBuf::from(&system_root).join("System32"));
-            // Para 32-bit DLLs em sistema 64-bit
+            // Include 32-bit DLL directory on 64-bit hosts.
             if env::var("PROCESSOR_ARCHITEW6432").is_ok() {
                 paths.push(PathBuf::from(&system_root).join("SysWOW64"));
             }
         }
-        // PATH pode ser perigoso para resolução implícita de DLLs.
-        // Só habilita se o usuário optar explicitamente.
+        // PATH can be unsafe for implicit DLL resolution.
+        // Only enable when explicitly opted in.
         if env::var_os("LUKS_DLOPEN_SEARCH_PATH").is_some() {
             if let Ok(path_var) = env::var("PATH") {
                 for dir in path_var.split(';') {
@@ -39,18 +39,18 @@ pub fn system_library_paths() -> Vec<PathBuf> {
 
     #[cfg(target_os = "linux")]
     {
-        // Linux: LD_LIBRARY_PATH tem prioridade
+        // Linux: LD_LIBRARY_PATH has priority.
         if let Ok(ld_path) = env::var("LD_LIBRARY_PATH") {
             for dir in ld_path.split(':') {
                 paths.push(PathBuf::from(dir));
             }
         }
-        // Pastas padrão
+        // Default library directories.
         paths.push(PathBuf::from("/usr/local/lib"));
         paths.push(PathBuf::from("/usr/lib"));
         paths.push(PathBuf::from("/lib"));
 
-        // Multiarch support (x86_64-linux-gnu, etc)
+        // Multiarch support (x86_64-linux-gnu, etc).
         if env::var_os("LUKS_DLOPEN_LINUX_MULTIARCH").is_some() {
             static MULTIARCH: LazyLock<Option<String>> = LazyLock::new(|| {
                 std::process::Command::new("dpkg-architecture")
@@ -76,13 +76,13 @@ pub fn system_library_paths() -> Vec<PathBuf> {
 
     #[cfg(target_os = "macos")]
     {
-        // macOS: DYLD_LIBRARY_PATH tem prioridade
+        // macOS: DYLD_LIBRARY_PATH has priority.
         if let Ok(dyld_path) = env::var("DYLD_LIBRARY_PATH") {
             for dir in dyld_path.split(':') {
                 paths.push(PathBuf::from(dir));
             }
         }
-        // Frameworks e pastas padrão
+        // Framework and default directories.
         paths.push(PathBuf::from("/usr/local/lib"));
         paths.push(PathBuf::from("/usr/lib"));
         paths.push(PathBuf::from("/System/Library/Frameworks"));
@@ -91,12 +91,12 @@ pub fn system_library_paths() -> Vec<PathBuf> {
 
     #[cfg(target_os = "android")]
     {
-        // Android
+        // Android.
         paths.push(PathBuf::from("/system/lib"));
         paths.push(PathBuf::from("/system/lib64"));
         paths.push(PathBuf::from("/vendor/lib"));
         paths.push(PathBuf::from("/vendor/lib64"));
-        // LD_LIBRARY_PATH no Android
+        // LD_LIBRARY_PATH on Android.
         if let Ok(ld_path) = env::var("LD_LIBRARY_PATH") {
             for dir in ld_path.split(':') {
                 paths.push(PathBuf::from(dir));
@@ -104,7 +104,7 @@ pub fn system_library_paths() -> Vec<PathBuf> {
         }
     }
 
-    // Variável customizada LUKS_PATH (funciona em todas as plataformas)
+    // Custom LUKS_PATH variable (works on all platforms).
     if let Ok(luks_path) = env::var("LUKS_PATH") {
         let separator = if cfg!(windows) { ';' } else { ':' };
         for dir in luks_path.split(separator) {
@@ -115,24 +115,24 @@ pub fn system_library_paths() -> Vec<PathBuf> {
     paths
 }
 
-/// Tenta encontrar uma biblioteca pelo nome
+/// Tries to find a library by name.
 ///
-/// Ordem de busca:
-/// 1. Se tiver path separators (/ ou \), não resolve aqui (o caller decide)
-/// 2. Tenta no diretório do executável
-/// 3. Tenta nas pastas de sistema
+/// Search order:
+/// 1. If path separators exist (`/` or `\`), skip resolution here (caller decides)
+/// 2. Try executable directory
+/// 3. Try system library directories
 ///
-/// Retorna None se não encontrar
+/// Returns `None` when not found.
 pub fn find_library(name: &str) -> Option<PathBuf> {
-    // Se tem separadores de path, é um caminho relativo ou absoluto
+    // If it has path separators, it is relative/absolute and handled by caller.
     if name.contains('/') || name.contains('\\') {
-        return None; // Deixa o caller resolver
+        return None; // Leave resolution to caller.
     }
 
-    // Monta os possíveis nomes de arquivo
+    // Build possible file names.
     let names = library_file_names(name);
 
-    // Tenta no diretório do executável (útil p/ apps empacotados)
+    // Try executable directory first (useful for bundled apps).
     if let Some(exe_dir) = executable_dir() {
         for lib_name in &names {
             let full_path = exe_dir.join(lib_name);
@@ -142,7 +142,7 @@ pub fn find_library(name: &str) -> Option<PathBuf> {
         }
     }
 
-    // Busca em todas as pastas do sistema
+    // Search all system directories.
     for dir in system_library_paths() {
         for lib_name in &names {
             let full_path = dir.join(lib_name);
@@ -155,13 +155,13 @@ pub fn find_library(name: &str) -> Option<PathBuf> {
     None
 }
 
-/// Retorna os possíveis nomes de arquivo para a biblioteca
+/// Returns possible file names for a given library name.
 ///
-/// Exemplo: "testmodule" → ["testmodule.dll", "libtestmodule.so", "libtestmodule.dylib"]
+/// Example: `testmodule` -> `testmodule.dll`, `libtestmodule.so`, `libtestmodule.dylib`.
 fn library_file_names(name: &str) -> Vec<String> {
     let mut names = Vec::new();
 
-    // Se já tem extensão, usa só ele
+    // If extension already exists, keep as-is.
     if std::path::Path::new(name).extension().is_some() {
         names.push(name.to_string());
         return names;
@@ -180,7 +180,7 @@ fn library_file_names(name: &str) -> Vec<String> {
         } else {
             names.push(format!("lib{}.so", name));
         }
-        // Também tenta sem prefixo (alguns sistemas)
+        // Also try without `lib` prefix (some systems).
         names.push(format!("{}.so", name));
     }
 
@@ -192,14 +192,14 @@ fn library_file_names(name: &str) -> Vec<String> {
         } else {
             names.push(format!("lib{}.dylib", name));
         }
-        // Também tenta sem prefixo
+        // Also try without `lib` prefix.
         names.push(format!("{}.dylib", name));
     }
 
     names
 }
 
-/// Retorna o diretório do executável atual
+/// Returns the current executable directory.
 pub fn executable_dir() -> Option<PathBuf> {
     env::current_exe()
         .ok()
@@ -215,7 +215,7 @@ mod tests {
         let names = library_file_names("test");
         assert!(names.iter().any(|n| n.contains("test")));
 
-        // Com extensão deve retornar só ela
+        // With extension it should return only that candidate.
         let names_ext = library_file_names("test.dll");
         assert_eq!(names_ext.len(), 1);
         assert_eq!(names_ext[0], "test.dll");
