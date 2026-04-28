@@ -20,13 +20,13 @@ fn main() -> Result<()> {
         return Ok(());
     }
 
-    // Aplicar permissões ANTES de carregar o runtime
+    // Apply permissions BEFORE loading the runtime.
     if cli.strict { std::env::set_var("LUKS_STRICT", "1"); }
     if cli.no_read { std::env::set_var("LUKS_DENY_READ", "1"); }
     if cli.no_native { std::env::set_var("LUKS_DENY_NATIVE", "1"); }
     if cli.no_import { std::env::set_var("LUKS_DENY_IMPORT", "1"); }
 
-    // Resolução de Comando (Fallback Legacy)
+    // Command resolution (legacy fallback behavior).
     let cmd = match cli.command {
         Some(c) => c,
         None => {
