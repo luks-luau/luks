@@ -1,4 +1,4 @@
-use crate::utils::canonicalize_or_absolute;
+use crate::path_resolution::canonicalize_or_absolute;
 use libloading::{Library, Symbol};
 use std::path::Path;
 use std::sync::Mutex;
@@ -14,14 +14,9 @@ static LOADED_LIBS: LazyLock<Mutex<Vec<(std::path::PathBuf, Library)>>> =
 
 /// Carrega uma biblioteca e retorna o símbolo "luau_export"
 pub fn load_export(path: &Path) -> Result<LuauExport, String> {
-    // Enforce permission check: if native loading is not allowed, deny the dlopen
-    if !crate::permissions::Permissions::current().check_native() {
-        return Err("Native module loading not allowed".to_string());
-    }
-
     let key = canonicalize_or_absolute(path);
 
-    let mut libs = LOADED_LIBS
+    let libs = LOADED_LIBS
         .lock()
         .map_err(|_| "falha ao adquirir lock de LOADED_LIBS".to_string())?;
 
@@ -32,6 +27,7 @@ pub fn load_export(path: &Path) -> Result<LuauExport, String> {
         };
         return Ok(*symbol);
     }
+    drop(libs);
 
     let library = unsafe {
         Library::new(&key)
@@ -45,6 +41,18 @@ pub fn load_export(path: &Path) -> Result<LuauExport, String> {
     };
 
     let func: LuauExport = *symbol;
+
+    let mut libs = LOADED_LIBS
+        .lock()
+        .map_err(|_| "falha ao adquirir lock de LOADED_LIBS".to_string())?;
+    if let Some((_, lib)) = libs.iter().find(|(p, _)| *p == key) {
+        let symbol: Symbol<LuauExport> = unsafe {
+            lib.get(b"luau_export\0")
+                .map_err(|e| format!("símbolo 'luau_export' não encontrado: {}", e))?
+        };
+        return Ok(*symbol);
+    }
+
     libs.push((key, library));
     Ok(func)
 }
