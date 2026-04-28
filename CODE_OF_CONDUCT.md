@@ -37,33 +37,6 @@ diverse, inclusive, and healthy community.
 - **Abuse of power**: Using influence or position to intimidate or manipulate
   others
 
-## Project-Specific Guidelines
-
-### Security and Safety
-
-Given that luks-luau is a runtime environment capable of executing code and
-loading native modules, we hold these additional expectations:
-
-- **Responsible disclosure**: Follow the security policy in [SECURITY.md](SECURITY.md)
-  for reporting vulnerabilities
-- **Permission awareness**: Understand and respect the permission system
-  (`--no-read`, `--no-native`, `--no-import`, `--strict` flags)
-- **Sandboxing awareness**: Recognize that luks-luau is not sandboxed by default
-  and requires OS-level isolation for untrusted code
-- **Native module safety**: Exercise caution when contributing native module
-  loading functionality
-
-### Technical Contributions
-
-- **Testing**: Ensure new features include appropriate tests, especially for
-  security-sensitive code paths
-- **Documentation**: Update relevant documentation when changing behavior,
-  particularly security-related features
-- **Platform considerations**: Test changes across supported platforms
-  (Windows, Linux, macOS, Android) when applicable
-- **FFI safety**: Pay special attention to FFI boundaries and unsafe code,
-  following Rust best practices
-
 ## Enforcement Responsibilities
 
 Community leaders are responsible for clarifying and enforcing our standards of
