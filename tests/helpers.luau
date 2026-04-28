@@ -114,6 +114,9 @@ function helpers.test(name, fn)
 
     -- Print in required format: CATEGORY -> FUNCTION_NAME [STATUS]
     helpers.print_result(helpers.current_category, helpers.current_case, name, status)
+    if not success then
+        print(string.format("  error: %s", tostring(err)))
+    end
 
     return status, err
 end
