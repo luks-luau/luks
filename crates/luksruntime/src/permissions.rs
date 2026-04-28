@@ -32,9 +32,15 @@ impl Permissions {
         }
     }
 
-    pub fn check_read(&self) -> bool { self.allow_read }
-    pub fn check_native(&self) -> bool { self.allow_native }
-    pub fn check_import(&self) -> bool { self.allow_import }
+    pub fn check_read(&self) -> bool {
+        self.allow_read
+    }
+    pub fn check_native(&self) -> bool {
+        self.allow_native
+    }
+    pub fn check_import(&self) -> bool {
+        self.allow_import
+    }
 }
 
 /// Checks native-loading permission and converts panics into errors.

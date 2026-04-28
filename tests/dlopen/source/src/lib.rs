@@ -1,5 +1,10 @@
 use mlua_sys::luau::*;
 
+/// Entrypoint for native module loading.
+///
+/// # Safety
+/// - `l` must be a valid Luau `lua_State*`.
+/// - The stack must be in a valid state for creating and returning a table.
 #[no_mangle]
 pub unsafe extern "C-unwind" fn luau_export(l: *mut lua_State) -> i32 {
     lua_createtable(l, 0, 2);

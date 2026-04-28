@@ -54,10 +54,7 @@ where
 {
     // AssertUnwindSafe tells the compiler that unwind-safety is handled here
     // by converting panic into `None`.
-    match panic::catch_unwind(AssertUnwindSafe(f)) {
-        Ok(res) => Some(res),
-        Err(_) => None,
-    }
+    panic::catch_unwind(AssertUnwindSafe(f)).ok()
 }
 
 /// Specialized helper for functions that return `*mut i8` (C strings).

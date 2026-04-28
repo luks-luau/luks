@@ -160,11 +160,13 @@ impl Require for LuksRequirer {
 
     /// Checks whether the current path points to an existing module.
     fn has_module(&self) -> bool {
-        std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| self.find_module().is_some()))
-            .unwrap_or_else(|_| {
-                crate::utils::runtime_warn("Internal panic in has_module(); returning false");
-                false
-            })
+        std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            self.find_module().is_some()
+        }))
+        .unwrap_or_else(|_| {
+            crate::utils::runtime_warn("Internal panic in has_module(); returning false");
+            false
+        })
     }
 
     /// Returns the cache key for the current module.
@@ -194,10 +196,7 @@ impl Require for LuksRequirer {
     fn loader(&self, lua: &Lua) -> LuaResult<Function> {
         std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             let path = self.find_module().ok_or_else(|| {
-                mlua::Error::runtime(format!(
-                    "module not found: {}",
-                    self.current_path.display()
-                ))
+                mlua::Error::runtime(format!("module not found: {}", self.current_path.display()))
             })?;
             // Read the module file.
             let mut file = File::open(&path)

@@ -20,7 +20,7 @@ pub struct LuksRuntime {
 
 /// Reads the current script directory from the `__script_dir__` global.
 unsafe fn get_script_dir(l: *mut ffi::lua_State) -> Option<std::path::PathBuf> {
-    ffi::lua_getglobal(l, b"__script_dir__\0".as_ptr() as *const i8);
+    ffi::lua_getglobal(l, c"__script_dir__".as_ptr());
     let result = if ffi::lua_isstring(l, -1) != 0 {
         let ptr = ffi::lua_tostring(l, -1);
         if ptr.is_null() {
@@ -185,7 +185,9 @@ unsafe fn lua_dlopen_impl(l: *mut ffi::lua_State) -> i32 {
         path_resolution::resolve_from_base(&base_dir, arg.as_ref())
     };
 
-    let path = path_resolution::normalize_path(&path_resolution::with_platform_library_extension(&raw_path));
+    let path = path_resolution::normalize_path(&path_resolution::with_platform_library_extension(
+        &raw_path,
+    ));
 
     // Check NATIVE permission with panic-safe wrapper.
     match crate::permissions::check_native_safely() {
@@ -215,11 +217,16 @@ fn register_dlopen(lua: &Lua) -> LuaResult<()> {
     unsafe {
         lua.exec_raw((), |state| {
             ffi::lua_pushcfunction(state, lua_dlopen);
-            ffi::lua_setglobal(state, b"dlopen\0".as_ptr() as *const i8);
+            ffi::lua_setglobal(state, c"dlopen".as_ptr());
         })
     }
 }
 
+/// Creates a new runtime instance.
+///
+/// # Safety
+/// The returned pointer is owned by the caller and must be released with
+/// [`luks_destroy`].
 #[no_mangle]
 pub unsafe extern "C-unwind" fn luks_new() -> *mut LuksRuntime {
     ffi_utils::ffi_catch_unwind(|| luks_new_impl()).unwrap_or(ptr::null_mut())
@@ -274,11 +281,20 @@ unsafe fn luks_new_impl() -> *mut LuksRuntime {
     }
 
     let compiler = Compiler::new().set_optimization_level(1).set_debug_level(1);
-    let _ = lua.set_compiler(compiler);
+    lua.set_compiler(compiler);
 
     Box::into_raw(Box::new(LuksRuntime { lua }))
 }
 
+/// Executes Luau source code inside an existing runtime.
+///
+/// Returns a null pointer on success. On failure, returns an allocated C string
+/// describing the error; the caller must free it with [`luks_free_error`].
+///
+/// # Safety
+/// - `rt` must be a valid pointer returned by [`luks_new`].
+/// - `source` must be a valid, NUL-terminated UTF-8 string.
+/// - `chunk_name` must be a valid, NUL-terminated UTF-8 string (or null).
 #[no_mangle]
 pub unsafe extern "C-unwind" fn luks_execute(
     rt: *mut LuksRuntime,
@@ -330,6 +346,11 @@ unsafe fn luks_execute_impl(
     }
 }
 
+/// Frees an error string allocated by the runtime.
+///
+/// # Safety
+/// `err` must be a pointer previously returned by this runtime (for example by
+/// [`luks_execute`] or [`luks_clear_loaded_libs`]), and must be freed at most once.
 #[no_mangle]
 pub unsafe extern "C-unwind" fn luks_free_error(err: *mut i8) {
     // No catch_unwind needed: dropping CString should not panic in normal conditions.
@@ -338,6 +359,14 @@ pub unsafe extern "C-unwind" fn luks_free_error(err: *mut i8) {
     }
 }
 
+/// Clears the internal native-library cache.
+///
+/// Returns null on success. On failure, returns an allocated error string that
+/// must be freed with [`luks_free_error`].
+///
+/// # Safety
+/// This function may be called from foreign code. The returned pointer, when
+/// non-null, is owned by the caller.
 #[no_mangle]
 pub unsafe extern "C-unwind" fn luks_clear_loaded_libs() -> *mut i8 {
     ffi_utils::ffi_catch_unwind(|| match loader::clear_loaded_libs() {
@@ -347,6 +376,11 @@ pub unsafe extern "C-unwind" fn luks_clear_loaded_libs() -> *mut i8 {
     .unwrap_or(ffi_utils::ffi_error_msg("panic during clear_loaded_libs"))
 }
 
+/// Destroys a runtime instance created by [`luks_new`].
+///
+/// # Safety
+/// - `rt` must be a pointer returned by [`luks_new`].
+/// - It must not be used after this call.
 #[no_mangle]
 pub unsafe extern "C-unwind" fn luks_destroy(rt: *mut LuksRuntime) {
     // No catch_unwind needed: dropping Box should not panic.
@@ -356,6 +390,9 @@ pub unsafe extern "C-unwind" fn luks_destroy(rt: *mut LuksRuntime) {
 }
 
 /// Returns runtime version from `Cargo.toml` at compile time.
+///
+/// # Safety
+/// The returned pointer is valid for the lifetime of the process.
 #[no_mangle]
 pub unsafe extern "C-unwind" fn luks_version() -> *const c_char {
     const VER: &[u8] = concat!(env!("CARGO_PKG_VERSION"), "\0").as_bytes();
@@ -363,15 +400,20 @@ pub unsafe extern "C-unwind" fn luks_version() -> *const c_char {
 }
 
 /// Returns the linked Luau VM version (dynamic, no hardcoded value).
+///
+/// # Safety
+/// The returned pointer is valid for the lifetime of the process.
 #[no_mangle]
 pub unsafe extern "C-unwind" fn luks_luau_version() -> *const c_char {
-    use std::sync::OnceLock;
     use std::ffi::CString;
+    use std::sync::OnceLock;
 
     static LUAU_VER: OnceLock<CString> = OnceLock::new();
-    LUAU_VER.get_or_init(|| {
-        // `mlua_sys::luau_version` returns `Option<&'static str>`.
-        let ver = mlua_sys::luau_version().unwrap_or("unknown");
-        CString::new(ver).expect("Luau version string contained null byte")
-    }).as_ptr()
+    LUAU_VER
+        .get_or_init(|| {
+            // `mlua_sys::luau_version` returns `Option<&'static str>`.
+            let ver = mlua_sys::luau_version().unwrap_or("unknown");
+            CString::new(ver).expect("Luau version string contained null byte")
+        })
+        .as_ptr()
 }
