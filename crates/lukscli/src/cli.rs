@@ -7,7 +7,7 @@ use std::path::PathBuf;
     about = "Luks Luau CLI",
     disable_version_flag = true,
     disable_help_flag = true,
-    allow_hyphen_values = true,
+    allow_hyphen_values = true
 )]
 pub struct Cli {
     /// Shows CLI, Runtime, and VM versions.
@@ -26,10 +26,14 @@ pub struct Cli {
     pub command: Option<Commands>,
 
     // Global flags (allow-by-default model with deny flags).
-    #[arg(long, global = true)] pub no_read: bool,
-    #[arg(long, global = true)] pub no_native: bool,
-    #[arg(long, global = true)] pub no_import: bool,
-    #[arg(long, global = true)] pub strict: bool,
+    #[arg(long, global = true)]
+    pub no_read: bool,
+    #[arg(long, global = true)]
+    pub no_native: bool,
+    #[arg(long, global = true)]
+    pub no_import: bool,
+    #[arg(long, global = true)]
+    pub strict: bool,
 }
 
 #[derive(Subcommand, Clone, Debug)]
@@ -39,7 +43,10 @@ pub enum Commands {
     Run { path: PathBuf },
 
     /// Evaluates one-shot Luau code.
-    Eval { #[arg(short, long)] code: String },
+    Eval {
+        #[arg(short, long)]
+        code: String,
+    },
 
     /// Shows versions.
     #[command(alias = "v")]

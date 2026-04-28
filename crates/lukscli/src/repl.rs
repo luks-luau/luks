@@ -1,6 +1,6 @@
-use rustyline::DefaultEditor;
 use crate::runtime::RuntimeHandle;
 use anyhow::Result;
+use rustyline::DefaultEditor;
 
 pub fn run_repl() -> Result<()> {
     // Load runtime once and reuse it for the whole interactive session.
@@ -22,7 +22,9 @@ pub fn run_repl() -> Result<()> {
                     eprintln!("[ERR] {}", e);
                 }
             }
-            Err(rustyline::error::ReadlineError::Interrupted | rustyline::error::ReadlineError::Eof) => {
+            Err(
+                rustyline::error::ReadlineError::Interrupted | rustyline::error::ReadlineError::Eof,
+            ) => {
                 println!("\nBye.");
                 break;
             }

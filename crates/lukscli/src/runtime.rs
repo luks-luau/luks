@@ -1,6 +1,6 @@
+use anyhow::{Context, Result};
 use libloading::Library;
 use std::ffi::CStr;
-use anyhow::{Context, Result};
 
 /// Dynamic handle to the runtime shared library and FFI entrypoints.
 pub struct RuntimeHandle {
@@ -58,7 +58,8 @@ impl RuntimeHandle {
     pub fn get_versions(&self) -> Result<(String, String)> {
         unsafe {
             let rt_fn: extern "C-unwind" fn() -> *const i8 = std::mem::transmute(self.version);
-            let luau_fn: extern "C-unwind" fn() -> *const i8 = std::mem::transmute(self.luau_version);
+            let luau_fn: extern "C-unwind" fn() -> *const i8 =
+                std::mem::transmute(self.luau_version);
             Ok((
                 CStr::from_ptr(rt_fn()).to_string_lossy().into_owned(),
                 CStr::from_ptr(luau_fn()).to_string_lossy().into_owned(),
@@ -72,13 +73,21 @@ impl RuntimeHandle {
         let c_chunk = std::ffi::CString::new(chunk_name)?;
 
         unsafe {
-            let new_fn: extern "C-unwind" fn() -> *mut std::ffi::c_void = std::mem::transmute(self.new);
-            let exec_fn: extern "C-unwind" fn(*mut std::ffi::c_void, *const i8, *const i8) -> *mut i8 = std::mem::transmute(self.exec);
+            let new_fn: extern "C-unwind" fn() -> *mut std::ffi::c_void =
+                std::mem::transmute(self.new);
+            let exec_fn: extern "C-unwind" fn(
+                *mut std::ffi::c_void,
+                *const i8,
+                *const i8,
+            ) -> *mut i8 = std::mem::transmute(self.exec);
             let free_fn: extern "C-unwind" fn(*mut i8) = std::mem::transmute(self.free);
-            let destroy_fn: extern "C-unwind" fn(*mut std::ffi::c_void) = std::mem::transmute(self.destroy);
+            let destroy_fn: extern "C-unwind" fn(*mut std::ffi::c_void) =
+                std::mem::transmute(self.destroy);
 
             let rt = new_fn();
-            if rt.is_null() { anyhow::bail!("Failed to initialize runtime"); }
+            if rt.is_null() {
+                anyhow::bail!("Failed to initialize runtime");
+            }
 
             let err = exec_fn(rt, c_src.as_ptr(), c_chunk.as_ptr());
             destroy_fn(rt);

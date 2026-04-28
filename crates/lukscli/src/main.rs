@@ -1,11 +1,11 @@
 mod cli;
-mod runtime;
 mod repl;
+mod runtime;
 
+use anyhow::Result;
 use clap::{CommandFactory, Parser};
 use cli::{Cli, Commands};
 use std::path::PathBuf;
-use anyhow::Result;
 
 fn main() -> Result<()> {
     let cli = Cli::parse();
@@ -21,10 +21,18 @@ fn main() -> Result<()> {
     }
 
     // Apply permissions BEFORE loading the runtime.
-    if cli.strict { std::env::set_var("LUKS_STRICT", "1"); }
-    if cli.no_read { std::env::set_var("LUKS_DENY_READ", "1"); }
-    if cli.no_native { std::env::set_var("LUKS_DENY_NATIVE", "1"); }
-    if cli.no_import { std::env::set_var("LUKS_DENY_IMPORT", "1"); }
+    if cli.strict {
+        std::env::set_var("LUKS_STRICT", "1");
+    }
+    if cli.no_read {
+        std::env::set_var("LUKS_DENY_READ", "1");
+    }
+    if cli.no_native {
+        std::env::set_var("LUKS_DENY_NATIVE", "1");
+    }
+    if cli.no_import {
+        std::env::set_var("LUKS_DENY_IMPORT", "1");
+    }
 
     // Command resolution (legacy fallback behavior).
     let cmd = match cli.command {
@@ -33,7 +41,9 @@ fn main() -> Result<()> {
             if cli.trailing.is_empty() {
                 Commands::Repl
             } else {
-                Commands::Run { path: PathBuf::from(&cli.trailing[0]) }
+                Commands::Run {
+                    path: PathBuf::from(&cli.trailing[0]),
+                }
             }
         }
     };
