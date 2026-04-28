@@ -124,33 +124,34 @@ unsafe fn get_caller_script_dir(l: *mut ffi::lua_State) -> Option<std::path::Pat
 /// Carrega uma biblioteca dinâmica e chama o luau_export
 ///
 /// # Safety
-/// Esta função é marcada extern "C-unwind" mas ainda envolve o corpo
-/// com catch_unwind para garantir que panics do Rust não vazem para Lua C.
+/// Esta função é chamada pela VM Luau e pode levantar erros Lua via lua_error.
+/// O corpo deve evitar panics para não propagar através da fronteira FFI.
 unsafe extern "C-unwind" fn lua_dlopen(l: *mut ffi::lua_State) -> i32 {
-    ffi_utils::ffi_catch_unwind(|| {
-        // Corpo da função movido para dentro do catch_unwind
-        lua_dlopen_impl(l)
-    })
-    .unwrap_or(0) // Retorna 0 (sucesso vazio) em caso de panic para não crashar
+    lua_dlopen_impl(l)
+}
+
+unsafe fn lua_error(l: *mut ffi::lua_State, msg: impl AsRef<str>) -> i32 {
+    let sanitized = msg.as_ref().replace('\0', "\\0");
+    match CString::new(sanitized) {
+        Ok(cmsg) => {
+            ffi::lua_pushstring(l, cmsg.as_ptr());
+        }
+        Err(_) => {
+            ffi::lua_pushliteral(l, c"internal error");
+        }
+    }
+    ffi::lua_error(l)
 }
 
 /// Implementação interna de dlopen, isolada para teste e segurança
 unsafe fn lua_dlopen_impl(l: *mut ffi::lua_State) -> i32 {
     if ffi::lua_isstring(l, 1) == 0 {
-        ffi::lua_pushnil(l);
-        let msg = ffi_utils::ffi_error_msg("dlopen: argumento 1 deve ser string");
-        ffi::lua_pushstring(l, msg);
-        drop(CString::from_raw(msg)); // Lua copia a string, então liberamos
-        return 2;
+        return lua_error(l, "dlopen: argumento 1 deve ser string");
     }
 
     let arg_ptr = ffi::lua_tostring(l, 1);
     if arg_ptr.is_null() {
-        ffi::lua_pushnil(l);
-        let msg = ffi_utils::ffi_error_msg("dlopen: argumento 1 inválido");
-        ffi::lua_pushstring(l, msg);
-        drop(CString::from_raw(msg));
-        return 2;
+        return lua_error(l, "dlopen: argumento 1 inválido");
     }
 
     let arg = CStr::from_ptr(arg_ptr).to_string_lossy();
@@ -264,13 +265,11 @@ unsafe fn lua_dlopen_impl(l: *mut ffi::lua_State) -> i32 {
         }
         Ok(false) => {
             // Permissão negada
-            ffi::lua_pushliteral(l, c"Native module loading denied");
-            return 1; // Retorna 1 valor (a string de erro) para o Lua
+            return lua_error(l, "Native module loading denied");
         }
         Err(_) => {
             // Panic interno na verificação (Fail-safe)
-            ffi::lua_pushliteral(l, c"dlopen blocked: internal permission error");
-            return 1;
+            return lua_error(l, "dlopen blocked: internal permission error");
         }
     }
 
@@ -279,18 +278,7 @@ unsafe fn lua_dlopen_impl(l: *mut ffi::lua_State) -> i32 {
 
     match loader.load(&path_str) {
         Ok(export) => export(l),
-        Err(e) => {
-            ffi::lua_pushnil(l);
-            let sanitized = e.replace('\0', "\\0");
-            // Usa ffi_utils para evitar panic em CString::new com null bytes
-            let msg = ffi_utils::ffi_error_msg(sanitized);
-            ffi::lua_pushstring(l, msg);
-            // Nota: msg é alocado via CString::into_raw, mas Lua faz cópia da string.
-            // Para evitar vazamento, precisamos liberar após lua_pushstring copiar.
-            // Como lua_pushstring copia o conteúdo, podemos liberar imediatamente:
-            drop(CString::from_raw(msg));
-            2
-        }
+        Err(e) => lua_error(l, e),
     }
 }
 
