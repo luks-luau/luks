@@ -1,6 +1,5 @@
--- Main Test Runner
--- Executes all test cases from multiple folders with ANSI colors
--- Usage: main.luau takes a list of folders to test
+-- Main test runner.
+-- Discovers numbered case files per category and executes them.
 
 local h = require("./helpers")
 
@@ -14,13 +13,6 @@ local expect = {
     type_ = h.expect_type,
     error = h.expect_error,
     same_ref = h.expect_same_ref,
-}
-
--- ANSI colors
-local colors = {
-    yellow = "\27[33m",
-    blue = "\27[34m",
-    reset = "\27[0m"
 }
 
 -- Auto-discovered test categories.
@@ -47,20 +39,23 @@ local function execute_test_case(folder, case_num, test_fn)
     h.current_case = case_num
 
     -- Run the test case
-    local _ok, _result = pcall(function()
+    local ok, result = pcall(function()
         return test_fn(expect)
     end)
+
+    if not ok then
+        h.print_result(folder, case_num, "case bootstrap", "FAIL")
+        print(string.format("  error: %s", tostring(result)))
+        return { passed = 0, failed = 1, total = 1 }
+    end
 
     return h.get_stats()
 end
 
--- Main execution
-print("=========================================")
-print("      Luks Runtime Test Suite")
-print("=========================================")
+h.print_banner("Luks Runtime Test Suite")
 
 -- Load all test cases into cache using sequential discovery.
-print("\n>> Loading tests into cache...")
+h.print_phase("Loading tests into cache...")
 
 for _, folder in ipairs(categories) do
     for case_num = 1, 100 do
@@ -69,6 +64,10 @@ for _, folder in ipairs(categories) do
         end)
 
         if not ok then
+            local reason = tostring(test_fn_or_err):match("^[^\n]+") or tostring(test_fn_or_err)
+            if reason ~= "runtime error: no module present at resolved path" then
+                print(string.format("skip %s case #%d: %s", folder, case_num, reason))
+            end
             break
         end
 
@@ -81,7 +80,7 @@ end
 print(string.format("Loaded %d test case(s)", #test_cases))
 
 -- Execute all cached tests
-print("\n>> Executing tests...\n")
+h.print_phase("Executing tests...\n")
 
 local total_stats = { passed = 0, failed = 0, total = 0 }
 local all_passed = true
@@ -103,10 +102,6 @@ for _, tc in ipairs(test_cases) do
     end
 end
 
--- Final summary (minimal)
-print(string.format("\nTotal: %d | Passed: %s%d%s | Failed: %s%d%s",
-    total_stats.total,
-    colors.yellow, total_stats.passed, colors.reset,
-    colors.blue, total_stats.failed, colors.reset))
+h.print_final_summary(total_stats.total, total_stats.passed, total_stats.failed)
 
 return all_passed

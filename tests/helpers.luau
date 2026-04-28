@@ -16,6 +16,16 @@ local colors = {
     reset = "\27[0m"
 }
 
+function helpers.print_banner(title)
+    print("=========================================")
+    print("      " .. title)
+    print("=========================================")
+end
+
+function helpers.print_phase(message)
+    print("\n>> " .. message)
+end
+
 -- Stats tracking
 local stats = {
     passed = 0,
@@ -150,6 +160,13 @@ function helpers.print_summary()
     local s = helpers.get_stats()
     print(string.format("\nTotal: %d | Passed: %d | Failed: %d",
         s.total, s.passed, s.failed))
+end
+
+function helpers.print_final_summary(total, passed, failed)
+    print(string.format("\nTotal: %d | Passed: %s%d%s | Failed: %s%d%s",
+        total,
+        colors.yellow, passed, colors.reset,
+        colors.blue, failed, colors.reset))
 end
 
 -- Full summary (for compatibility)
