@@ -10,6 +10,11 @@ name = "luksruntime"
 crate-type = ["cdylib"]
 
 [dependencies]
-mlua = { version = "0.11", features = ["luau", "vendored"] }
+mlua = { version = "0.11", features = ["luau", "vendored", "async"] }
 mlua-sys = "0.10"
 libloading = "0.9"
+mlua-luau-scheduler = { path = "../mlua-luau-scheduler" }
+async-executor = "1.13"
+futures-lite = "2.6"
+tracing = "0.1"
+async-io = "2.4"
