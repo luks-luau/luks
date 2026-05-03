@@ -1,0 +1,31 @@
+local h = require("../../helpers")
+local Signal = require("../../../luks-std/Signal")
+
+return function(expect)
+    h.suite("Signal Wait", function()
+        h.test("Wait returns fired arguments", function()
+            local sig = Signal.new()
+            task.spawn(function()
+                task.wait(0.1)
+                sig:Fire(10, "test")
+            end)
+            local a, b = sig:Wait()
+            expect.eq(a, 10)
+            expect.eq(b, "test")
+        end)
+
+        h.test("Wait yields until signal fires", function()
+            local sig = Signal.new()
+            local waited = false
+            task.spawn(function()
+                sig:Wait()
+                waited = true
+            end)
+            task.wait(0.1)
+            expect.false_(waited)
+            sig:Fire()
+            task.wait()
+            expect.true_(waited)
+        end)
+    end)
+end
