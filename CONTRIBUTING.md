@@ -139,42 +139,28 @@ all platforms and respects platform-specific path separators.
 Closes #123
 ```
 
-## Project Structure
+## Project Components
 
-```
-luks-luau/
-├── crates/
-│   ├── luksruntime/       # Core runtime library (C FFI)
-│   │   ├── src/
-│   │   │   ├── lib.rs     # Main runtime implementation
-│   │   │   ├── permissions.rs  # Permission system
-│   │   │   ├── luau_require.rs  # Custom require implementation
-│   │   │   ├── path_resolution.rs  # Path handling
-│   │   │   ├── loader/    # Native module loading
-│   │   │   │   ├── mod.rs
-│   │   │   │   ├── platform.rs  # Platform-specific loading
-│   │   │   │   └── search.rs    # Library search
-│   │   │   └── utils.rs
-│   │   └── Cargo.toml
-│   └── lukscli/           # Command-line interface
-│       ├── src/
-│       │   ├── main.rs    # CLI entry point
-│       │   ├── cli.rs     # Command-line parsing
-│       │   ├── runtime.rs # Runtime handle
-│       │   └── repl.rs    # REPL implementation
-│       └── Cargo.toml
-├── tests/                 # Luau test suite
-│   ├── main.luau         # Test runner
-│   ├── helpers.luau      # Test helpers
-│   ├── require/          # require() tests
-│   │   └── cases/
-│   └── dlopen/           # dlopen() tests
-│       └── cases/
-├── Cargo.toml            # Workspace configuration
-├── build.sh              # Unix build script
-├── build-win.bat         # Windows build script
-└── build-android.sh      # Android build script
-```
+luks-luau consists of several key components:
+
+- **luksruntime**: Core runtime library providing the C FFI interface.
+  - Implements custom `require()` with module caching and `@self/` path resolution.
+  - Provides `dlopen()` for loading native modules that export `luau_export`.
+  - Manages runtime permissions and path resolution.
+  - Includes async task scheduling via `mlua-luau-scheduler`.
+
+- **lukscli**: Command-line interface for the runtime.
+  - Script execution (`run` command), one-shot evaluation (`eval`), and interactive REPL.
+  - Permission flags (`--no-read`, `--no-native`, `--no-import`, `--strict`).
+
+- **mlua-luau-scheduler**: Async scheduler crate for Luau, using mlua.
+  - Provides `Scheduler`, `Functions`, and traits for async task scheduling.
+  - Supports `spawn`, `defer`, `cancel`, and coroutine wrapping.
+
+- **Test Suite**: Located in `tests/`, uses a custom Luau test framework with auto-discovery.
+  - Test runner: `main.luau` discovers and executes test cases.
+  - Helpers: `helpers.luau` provides assertion functions.
+  - Categories: Tests are organized by category (e.g., `require/`, `dlopen/`, `task/`).
 
 ### Key Components
 
