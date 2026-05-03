@@ -16,7 +16,7 @@ local expect = {
 }
 
 -- Auto-discovered test categories.
-local categories = { "require", "dlopen" }
+local categories = { "require", "dlopen", "task" }
 local test_cases = {}
 
 -- Cache for loaded test cases

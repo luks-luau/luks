@@ -3,6 +3,11 @@ use mlua::{Compiler, Lua, Result as LuaResult};
 use std::ffi::{CStr, CString};
 use std::os::raw::c_char;
 use std::ptr;
+use std::time::{Duration, Instant};
+
+use async_io::Timer;
+use futures_lite::future::yield_now;
+use mlua_luau_scheduler::{Functions, Scheduler};
 
 pub mod ffi_utils;
 pub mod permissions;
@@ -16,6 +21,7 @@ pub mod utils;
 #[repr(C)]
 pub struct LuksRuntime {
     lua: Lua,
+    scheduler: Scheduler,
 }
 
 /// Reads the current script directory from the `__script_dir__` global.
@@ -222,6 +228,57 @@ fn register_dlopen(lua: &Lua) -> LuaResult<()> {
     }
 }
 
+/// Registers the `task` module with scheduler functions.
+fn register_task_module(lua: &Lua, fns: &Functions) -> LuaResult<()> {
+    let task_wait = lua.create_async_function(task_wait)?;
+
+    // Create delay function (similar to lune-std-task)
+    let task_delay_env = lua.create_table()?;
+    task_delay_env.set("select", lua.globals().get::<mlua::Function>("select")?)?;
+    task_delay_env.set("spawn", fns.spawn.clone())?;
+    task_delay_env.set("defer", fns.defer.clone())?;
+    task_delay_env.set("wait", task_wait.clone())?;
+    task_delay_env.set_readonly(true);
+    let task_delay = lua
+        .load(DELAY_IMPL_LUA)
+        .set_name("task.delay")
+        .set_environment(task_delay_env)
+        .into_function()?;
+
+    // Create task module table
+    let task_module = lua.create_table()?;
+    task_module.set("cancel", fns.cancel.clone())?;
+    task_module.set("defer", fns.defer.clone())?;
+    task_module.set("delay", task_delay)?;
+    task_module.set("spawn", fns.spawn.clone())?;
+    task_module.set("wait", task_wait)?;
+    task_module.set_readonly(true);
+
+    lua.globals().set("task", task_module)?;
+    Ok(())
+}
+
+const DELAY_IMPL_LUA: &str = r"
+return defer(function(...)
+    wait(select(1, ...))
+    spawn(select(2, ...))
+end, ...)
+";
+
+async fn task_wait(lua: Lua, secs: Option<f64>) -> LuaResult<f64> {
+    yield_now().await;
+    task_wait_inner(lua, secs).await
+}
+
+async fn task_wait_inner(_: Lua, secs: Option<f64>) -> LuaResult<f64> {
+    let duration = Duration::from_secs_f64(secs.unwrap_or_default());
+    let duration = duration.max(Duration::from_millis(1));
+    yield_now().await;
+    let before = Instant::now();
+    let after = Timer::after(duration).await;
+    Ok((after - before).as_secs_f64())
+}
+
 /// Creates a new runtime instance.
 ///
 /// # Safety
@@ -235,6 +292,18 @@ pub unsafe extern "C-unwind" fn luks_new() -> *mut LuksRuntime {
 /// Safe implementation of `luks_new`, isolated for `catch_unwind`.
 unsafe fn luks_new_impl() -> *mut LuksRuntime {
     let lua = unsafe { Lua::unsafe_new() };
+
+    // Create scheduler for async task support
+    let scheduler = Scheduler::new(lua.clone());
+
+    // Create task functions from scheduler
+    let fns = match Functions::new(lua.clone()) {
+        Ok(f) => f,
+        Err(e) => {
+            crate::utils::runtime_warn(&format!("failed to create scheduler functions: {}", e));
+            return ptr::null_mut();
+        }
+    };
 
     // Configure Luau's native require using our `Require` trait implementation.
     let requirer = luau_require::LuksRequirer::new();
@@ -280,10 +349,16 @@ unsafe fn luks_new_impl() -> *mut LuksRuntime {
         return ptr::null_mut();
     }
 
+    // Register task module with scheduler functions
+    if let Err(e) = register_task_module(&lua, &fns) {
+        crate::utils::runtime_warn(&format!("failed to register task module: {}", e));
+        return ptr::null_mut();
+    }
+
     let compiler = Compiler::new().set_optimization_level(1).set_debug_level(1);
     lua.set_compiler(compiler);
 
-    Box::into_raw(Box::new(LuksRuntime { lua }))
+    Box::into_raw(Box::new(LuksRuntime { lua, scheduler }))
 }
 
 /// Executes Luau source code inside an existing runtime.
@@ -340,10 +415,37 @@ unsafe fn luks_execute_impl(
         .unwrap_or_else(|| ".".to_string());
     let _ = rt.lua.globals().set("__script_dir__", script_dir.clone());
 
-    match rt.lua.load(src).set_name(name_str).exec() {
-        Ok(_) => ptr::null_mut(),
-        Err(e) => ffi_utils::ffi_error_msg(format!("runtime error: {}", e)),
+    // Load the chunk and create a thread so it runs inside the scheduler
+    let chunk = match rt.lua.load(src).set_name(name_str).into_function() {
+        Ok(f) => f,
+        Err(e) => {
+            return ffi_utils::ffi_error_msg(format!("compile error: {}", e));
+        }
+    };
+    let thread = match rt.lua.create_thread(chunk) {
+        Ok(t) => t,
+        Err(e) => {
+            return ffi_utils::ffi_error_msg(format!("thread create error: {}", e));
+        }
+    };
+
+    // Push the main thread to the scheduler, track it, and get the ThreadId
+    let thread_id = match rt.scheduler.push_thread_front(thread, ()) {
+        Ok(id) => id,
+        Err(e) => {
+            return ffi_utils::ffi_error_msg(format!("scheduler push error: {}", e));
+        }
+    };
+
+    // Block on the scheduler until all tasks complete
+    async_io::block_on(rt.scheduler.run());
+
+    // Check if the main thread had an error
+    if let Some(Err(e)) = rt.scheduler.get_thread_result(thread_id) {
+        return ffi_utils::ffi_error_msg(format!("runtime error: {}", e));
     }
+
+    ptr::null_mut()
 }
 
 /// Frees an error string allocated by the runtime.
@@ -416,4 +518,27 @@ pub unsafe extern "C-unwind" fn luks_luau_version() -> *const c_char {
             CString::new(ver).expect("Luau version string contained null byte")
         })
         .as_ptr()
+}
+
+/// Runs the async scheduler until all tasks complete.
+///
+/// Returns a null pointer on success. On failure, returns an allocated C string
+/// describing the error; the caller must free it with [`luks_free_error`].
+///
+/// # Safety
+/// `rt` must be a valid pointer returned by [`luks_new`].
+#[no_mangle]
+pub unsafe extern "C-unwind" fn luks_run_scheduler(rt: *mut LuksRuntime) -> *mut i8 {
+    ffi_utils::ffi_catch_unwind(|| luks_run_scheduler_impl(rt)).unwrap_or(ptr::null_mut())
+}
+
+/// Internal `luks_run_scheduler` implementation.
+unsafe fn luks_run_scheduler_impl(rt: *mut LuksRuntime) -> *mut c_char {
+    if rt.is_null() {
+        return ffi_utils::ffi_error_msg("runtime nulo");
+    }
+    let rt = &mut *rt;
+    // Block on the scheduler until all tasks complete
+    async_io::block_on(rt.scheduler.run());
+    ptr::null_mut()
 }
