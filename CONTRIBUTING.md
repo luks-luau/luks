@@ -199,19 +199,12 @@ The project uses a custom Luau test framework located in `tests/`:
 
 #### Test Structure
 
-```
-tests/
-├── helpers.luau              # Assertion functions and utilities
-├── main.luau                 # Test runner with auto-discovery
-├── require/
-│   └── cases/
-│       ├── #1.luau          # Basic require tests
-│       └── #2.luau          # Module cache tests
-└── dlopen/
-    └── cases/
-        ├── #1.luau          # Object passing and error tests
-        └── #2.luau          # @self semantics tests
-```
+The test suite uses a modular framework with auto-discovery:
+
+- **Test Runner**: `main.luau` automatically discovers and executes test cases
+- **Helpers**: `helpers.luau` provides assertion functions (`expect_eq`, `expect_true`, etc.)
+- **Categories**: Tests are organized by category (e.g., `require/cases/`, `dlopen/cases/`, `task/cases/`)
+- **Naming**: Test files follow sequential numbering: `cases/#1.luau`, `cases/#2.luau`, etc.
 
 #### Running Tests
 
