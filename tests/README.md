@@ -2,26 +2,14 @@
 
 Modular test structure for the Luks runtime.
 
-## Structure
+## Test Suite Overview
 
-```
-tests/
-├── helpers.luau              # Assertion functions and utilities
-├── main.luau                 # Main test runner
-├── README.md                 # This file
-├── require/
-│   ├── cases/
-│   │   ├── #1.luau          # Basic require tests
-│   │   └── #2.luau          # Module cache tests
-│   └── subdir/
-│       └── mod.luau         # Helper module for tests
-└── dlopen/
-    ├── cases/
-    │   ├── #1.luau          # Object passing + dlopen error tests (pcall)
-    │   ├── #2.luau          # @self semantics tests
-    │   └── self/            # Fixtures for @self cases
-    └── object_receiver.luau # Helper for dlopen tests
-```
+The test suite is a modular Luau test framework with auto-discovery.
+
+- **Test Runner**: `main.luau` discovers and executes test cases automatically.
+- **Helpers**: `helpers.luau` provides assertion functions (`expect_eq`, `expect_true`, etc.).
+- **Categories**: Tests are organized by category (e.g., `require/`, `dlopen/`, `task/`).
+- **Adding Tests**: Create a new file `CATEGORY/cases/#N.luau` with sequential numbers.
 
 ## Running
 
