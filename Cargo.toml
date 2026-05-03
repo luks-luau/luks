@@ -1,8 +1,9 @@
 [workspace]
 members = [
+    "crates/mlua-luau-scheduler",
     "crates/luksruntime",
     "crates/lukscli",
-    "tests/dlopen/source",
+    "tests/dlopen/source"
 ]
 resolver = "2"
 
