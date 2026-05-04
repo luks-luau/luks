@@ -4,93 +4,149 @@ Native JSON encoding and decoding module for Luau, implemented in Rust using `se
 
 ## Features
 
-- **JSON Encoding**: Convert Luau values (nil, boolean, number, string, table) to JSON strings
-- **JSON Decoding**: Parse JSON strings into Luau values
-- **Type Support**: Handles nested objects, arrays, strings, numbers, booleans, and null
-- **Native Performance**: Fast JSON processing via Rust's `serde_json` crate
+- **JSON Encoding** — Converts Luau values (`nil`, `boolean`, `number`, `string`, `table`) to JSON strings
+- **JSON Decoding** — Parses JSON strings into Luau values
+- **Nested Types** — Full support for nested objects, arrays, and all JSON primitives
+- **Native Performance** — Fast JSON processing via Rust's `serde_json` crate
+- **Error via pcall** — Failures raise Lua runtime errors, catchable with `pcall`
 
 ## API Reference
 
 ### Types
 
 ```lua
+-- Any value representable in JSON (nil, boolean, number, string, or table)
 export type JsonValue = any
-
-export type Json = {
-    -- Encodes a Lua value to JSON string
-    encode: (value: JsonValue) -> string,
-    
-    -- Decodes a JSON string to Lua value
-    decode: (json_str: string) -> JsonValue,
-}
 ```
 
-### Functions
+### `Json.encode(value: JsonValue): string`
 
-#### `Json.encode(value: JsonValue): string`
-Converts a Luau value to a JSON string.
+Encodes a Luau value into a JSON string.
 
-- `nil` → `null`
-- `boolean` → `true/false`
-- `number` → JSON number
-- `string` → JSON string
-- `table` → JSON object (string keys) or array (integer keys starting at 1)
+| Luau type | JSON output |
+|-----------|-------------|
+| `nil`     | `null`      |
+| `boolean` | `true` / `false` |
+| `number`  | JSON number (raises on `NaN` / `Infinity`) |
+| `string`  | JSON string (null bytes replaced with U+FFFD) |
+| `table`   | JSON object or array (raises on circular references) |
 
-#### `Json.decode(json_str: string): JsonValue`
+Raises a Lua error on failure — use `pcall` to catch:
+
+```lua
+local ok, result = pcall(Json.encode, value)
+if not ok then
+    print("Encode error:", result)
+end
+```
+
+### `Json.decode(json_str: string): JsonValue`
+
 Parses a JSON string and returns the corresponding Luau value.
 
-- `null` → `nil`
-- `true/false` → boolean
-- JSON number → number
-- JSON string → string
-- JSON object → table (key-value pairs)
-- JSON array → table (integer-indexed)
+| JSON type      | Luau result  |
+|----------------|--------------|
+| `null`         | `nil`        |
+| `true`/`false` | `boolean`    |
+| number         | `number`     |
+| string         | `string`     |
+| object         | `table` (key→value) |
+| array          | `table` (integer-indexed) |
+
+Raises a Lua error on invalid JSON — use `pcall` to catch:
+
+```lua
+local ok, result = pcall(Json.decode, jsonString)
+if not ok then
+    print("Decode error:", result)
+end
+```
+
+### `Json.version: string`
+
+The native library version string.
+
+---
 
 ## Usage
+
+### Basic encode / decode
 
 ```lua
 local Json = require("@std/Json")
 
 -- Encoding
 local data = {
-    name = "John",
-    age = 30,
-    is_active = true,
-    tags = {"lua", "rust", "json"}
+    name     = "luks",
+    level    = 5,
+    active   = true,
+    tags     = { "lua", "rust", "json" },
 }
 local json_str = Json.encode(data)
 print(json_str)
--- Output: {"name":"John","age":30,"is_active":true,"tags":["lua","rust","json"]}
+-- {"name":"luks","level":5,"active":true,"tags":["lua","rust","json"]}
 
 -- Decoding
 local decoded = Json.decode('{"status":"ok","code":200}')
-print(decoded.status)  -- "ok"
-print(decoded.code)     -- 200
+print(decoded.status) -- "ok"
+print(decoded.code)   -- 200
 ```
 
-## Building the Native Library
+### Error handling with pcall
 
-1. Navigate to the `Json` directory:
-   ```bash
-   cd luks-std/Json
-   ```
+```lua
+-- Catch encode errors
+local ok, result = pcall(Json.encode, function() end) -- functions are unsupported
+if not ok then
+    print("Encode failed:", result) -- "unsupported type: function"
+end
 
-2. Build the release version:
-   ```bash
-   cargo build --release
-   ```
+-- Catch decode errors
+local ok2, result2 = pcall(Json.decode, "{invalid json}")
+if not ok2 then
+    print("Decode failed:", result2) -- "JSON decode error: ..."
+end
+```
 
-3. Copy the library to the `lib/` directory:
-   ```bash
-   # Windows
-   copy target\release\json.dll lib\
-   ```
+### Round-trip example
+
+```lua
+local original = { user = "luks", score = 42, verified = false }
+local encoded  = Json.encode(original)
+local decoded  = Json.decode(encoded)
+
+assert(decoded.user     == original.user)
+assert(decoded.score    == original.score)
+assert(decoded.verified == original.verified)
+```
+
+---
+
+## Building
+
+```bash
+cd luks-std/Json
+cargo build --release
+```
+
+Output locations:
+- **Windows**: `target/release/json.dll`
+- **Linux**: `target/release/libjson.so`
+- **macOS**: `target/release/libjson.dylib`
+
+Copy to `lib/` for deployment:
+```bash
+# Windows
+copy target\release\json.dll lib\
+```
+
+---
 
 ## Dependencies
 
-- **Rust Crate**: `serde_json` for fast JSON processing
-- **Luau VM**: Requires `dlopen` function for loading native modules
+- **Rust**: `serde_json` for fast JSON processing
+- **Luau VM**: Built-in `dlopen` function for loading native modules
 
 ## License
 
-MIT License - see [LICENSE](LICENSE) file for details.
+MIT License — see [LICENSE](LICENSE) file for details.
