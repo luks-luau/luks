@@ -34,6 +34,7 @@ unsafe fn lua_value_to_json(l: *mut lua_State, idx: i32) -> serde_json::Value {
                 }
             }
             LUA_TTABLE => {
+                let idx = lua_absindex(l, idx);
                 // Determine if array or object by checking keys
                 let mut is_array = true;
                 let mut max_index = 0;
@@ -115,19 +116,22 @@ unsafe fn json_value_to_lua(l: *mut lua_State, value: &serde_json::Value) {
                 lua_pushstring(l, cstr.as_ptr());
             }
             serde_json::Value::Array(arr) => {
-                lua_createtable(l, arr.len() as i32, 0);
+                lua_createtable(l, 0, arr.len().max(1) as i32);
+                let table_idx = lua_absindex(l, -1);
                 for (i, v) in arr.iter().enumerate() {
+                    lua_pushnumber(l, (i + 1) as f64);
                     json_value_to_lua(l, v);
-                    lua_rawseti(l, -2, (i + 1) as i64);
+                    lua_settable(l, table_idx);
                 }
             }
             serde_json::Value::Object(obj) => {
-                lua_createtable(l, 0, obj.len() as i32);
+                lua_createtable(l, 0, obj.len().max(1) as i32);
+                let table_idx = lua_absindex(l, -1);
                 for (k, v) in obj {
                     let key_cstr = CString::new(k.as_str()).unwrap();
                     lua_pushstring(l, key_cstr.as_ptr());
                     json_value_to_lua(l, v);
-                    lua_settable(l, -3);
+                    lua_settable(l, table_idx);
                 }
             }
         }
