@@ -145,8 +145,8 @@ impl Require for LuksRequirer {
                 .map(|p| p.to_path_buf())
                 .unwrap_or_else(|| PathBuf::from("."));
             // Make module_folder absolute for correct navigation
-            let module_folder_abs = std::path::absolute(&module_folder)
-                .unwrap_or(module_folder.clone());
+            let module_folder_abs =
+                std::path::absolute(&module_folder).unwrap_or(module_folder.clone());
             // @self = module folder
             self.module_folder = Some(module_folder_abs.clone());
             // script_dir = parent of module folder (for bare name resolution)
