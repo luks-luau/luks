@@ -92,7 +92,7 @@ Native library version string.
 ### GET request
 
 ```lua
-local Http = require("@std/Http")
+local Http = require("./path/to/Http")
 
 local response = Http.get("https://httpbin.org/get", {
     ["Accept"] = "application/json",
@@ -109,8 +109,8 @@ end
 ### POST with JSON body
 
 ```lua
-local Http = require("@std/Http")
-local Json = require("@std/Json")
+local Http = require("./path/to/Http")
+local Json = require("./path/to/Json")
 
 local response = Http.post("https://httpbin.org/post", {
     headers = { ["Content-Type"] = "application/json" },
@@ -136,7 +136,7 @@ print(response.status) -- 204
 ### Async request (Signal-based)
 
 ```lua
-local Http = require("@std/Http")
+local Http = require("./path/to/Http")
 
 -- Connect a callback before the response arrives
 local sig = Http.getAsync("https://httpbin.org/delay/1")
@@ -154,7 +154,7 @@ end)
 ### URL encoding
 
 ```lua
-local Http = require("@std/Http")
+local Http = require("./path/to/Http")
 
 -- Encode individual components
 print(Http.urlencodePart("hello world")) -- "hello%20world"

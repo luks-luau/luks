@@ -101,7 +101,7 @@ Returns the URL this connection was opened against. Raises a Lua error if the ha
 ### Echo test
 
 ```lua
-local WebSocket = require("@std/WebSocket")
+local WebSocket = require("./path/to/WebSocket")
 
 local conn = WebSocket.connect("wss://echo.websocket.org")
 
@@ -121,7 +121,7 @@ conn:send("Hello WebSocket!")
 ### Error handling with pcall
 
 ```lua
-local WebSocket = require("@std/WebSocket")
+local WebSocket = require("./path/to/WebSocket")
 
 local ok, result = pcall(WebSocket.connect, "wss://invalid.host.example", { timeout = 5 })
 if not ok then
@@ -142,8 +142,8 @@ end
 ### Discord Gateway (preview)
 
 ```lua
-local WebSocket = require("@std/WebSocket")
-local Json      = require("@std/Json")
+local WebSocket = require("./path/to/WebSocket")
+local Json      = require("./path/to/Json")
 
 local GATEWAY = "wss://gateway.discord.gg/?v=10&encoding=json"
 local TOKEN   = "Bot YOUR_TOKEN_HERE"

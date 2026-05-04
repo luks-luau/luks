@@ -73,7 +73,7 @@ The native library version string.
 ### Basic encode / decode
 
 ```lua
-local Json = require("@std/Json")
+local Json = require("./path/to/Json")
 
 -- Encoding
 local data = {
