@@ -2,6 +2,7 @@
 
 A lightweight Luau runtime written in Rust with native module loading and async task scheduling capabilities.
 
+![CI](https://github.com/luks-luau/luks/actions/workflows/ci.yml/badge.svg)
 ![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)
 ![Rust](https://img.shields.io/badge/rust-1.70%2B-orange.svg)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS%20%7C%20Android-blue.svg)
