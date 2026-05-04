@@ -5,7 +5,8 @@ members = [
     "crates/lukscli",
     "tests/dlopen/source",
     "luks-std/std-template",
-    "luks-std/Json"
+    "luks-std/Json",
+    "luks-std/Http"
 ]
 resolver = "2"
 
