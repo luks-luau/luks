@@ -9,24 +9,31 @@ pub fn default_base_dir(base: Option<PathBuf>) -> PathBuf {
 /// Resolves a runtime path from a base directory.
 /// Supports `@self`, explicit relative paths, and absolute paths.
 pub fn resolve_from_base(base: &Path, input: &str) -> PathBuf {
+    // Make base absolute to correctly normalize relative paths like "foo/../bar"
+    let base_abs = if base.is_absolute() {
+        base.to_path_buf()
+    } else {
+        std::path::absolute(base).unwrap_or_else(|_| base.to_path_buf())
+    };
+
     if let Some(rest) = input
         .strip_prefix("@self/")
         .or_else(|| input.strip_prefix("@self\\"))
     {
-        return base.join(rest);
+        return base_abs.join(rest);
     }
 
     if input == "@self" {
-        return base.to_path_buf();
+        return base_abs;
     }
 
     let p = Path::new(input);
     if is_explicit_relative(input) {
-        base.join(p)
+        normalize_path(&base_abs.join(p))
     } else if p.is_absolute() {
         p.to_path_buf()
     } else {
-        base.join(p)
+        normalize_path(&base_abs.join(p))
     }
 }
 

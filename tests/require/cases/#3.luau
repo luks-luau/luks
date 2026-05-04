@@ -13,12 +13,9 @@ return function(expect)
         end)
 
         h.test("init.luau resolves bare name to parent directory", function()
-            -- O require("pastadoscript2") dentro de pastadoscript/init.luau
-            -- deve procurar em init-test/pastadoscript2, não em init-test/pastadoscript/pastadoscript2
             local mod = require("./init-test/pastadoscript")
             expect.eq(mod.hello, "from pastadoscript", "init module should load correctly")
         end)
 
     end)
-    return true
 end

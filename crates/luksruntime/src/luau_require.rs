@@ -14,6 +14,9 @@ pub struct LuksRequirer {
     current_path: PathBuf,
     /// Directory of the script that initiated `require` (`__script_dir__`).
     script_dir: PathBuf,
+    /// For init.luau/init.lua, this is the module folder (where init file is).
+    /// Used for `@self` resolution so `@self/sub` works for submodules.
+    module_folder: Option<PathBuf>,
     /// Additional roots from `LUKS_REQUIRE_PATH`.
     require_paths: Vec<PathBuf>,
 }
@@ -23,6 +26,7 @@ impl LuksRequirer {
         Self {
             current_path: PathBuf::from("."),
             script_dir: PathBuf::from("."),
+            module_folder: None,
             require_paths: std::env::var("LUKS_REQUIRE_PATH")
                 .ok()
                 .map(|v| {
@@ -126,36 +130,57 @@ impl Require for LuksRequirer {
         let chunk_name = chunk_name.strip_prefix('@').unwrap_or(chunk_name);
 
         let path = Path::new(chunk_name);
-        let parent_dir = path
-            .parent()
-            .map(|p| p.to_path_buf())
-            .unwrap_or_else(|| PathBuf::from("."));
 
-        // If this is an init.luau or init.lua file, the "module" is the directory
-        // containing the init file, not the file itself.
-        // We set current_path to the module folder so navigation works correctly.
+        // For init.luau/init.lua, @self refers to the module folder (where init file is).
+        // This allows require("@self/sub") to work for submodules.
+        // For example, for "modulo/sub/init.luau", @self = "modulo/sub/".
+        //
+        // The script_dir (used for bare name resolution) is set to the parent of the
+        // module folder, so that require("sibling") finds sibling modules.
         let filename = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
         if filename == "init.luau" || filename == "init.lua" {
-            // current_path should be the module folder (parent of init.luau)
-            self.current_path = parent_dir.clone();
-            // script_dir should be the grandparent (for resolving @self/ and relative paths)
-            self.script_dir = parent_dir
+            // Module folder is the parent directory (e.g., "modulo/sub" for "modulo/sub/init.luau")
+            let module_folder = path
                 .parent()
                 .map(|p| p.to_path_buf())
-                .unwrap_or(parent_dir.clone());
+                .unwrap_or_else(|| PathBuf::from("."));
+            // Make module_folder absolute for correct navigation
+            let module_folder_abs = std::path::absolute(&module_folder)
+                .unwrap_or(module_folder.clone());
+            // @self = module folder
+            self.module_folder = Some(module_folder_abs.clone());
+            // script_dir = parent of module folder (for bare name resolution)
+            self.script_dir = module_folder_abs
+                .parent()
+                .map(|p| p.to_path_buf())
+                .unwrap_or(module_folder_abs.clone());
+            // current_path is the module folder for navigation
+            self.current_path = module_folder_abs;
         } else {
-            // Set current_path to the file path, not the directory.
-            // Luau will call `to_parent` when directory navigation is needed.
+            // For regular files, reset module_folder and use file's directory
+            self.module_folder = None;
             self.current_path = PathBuf::from(chunk_name);
-            // script_dir is the parent directory
-            self.script_dir = parent_dir;
+            self.script_dir = path
+                .parent()
+                .map(|p| p.to_path_buf())
+                .unwrap_or_else(|| PathBuf::from("."));
         }
 
         Ok(())
     }
 
     /// Jumps to an alias path (absolute or fully relative).
+    /// For @self paths, sets current_path to module_folder, then lets Luau
+    /// navigate using to_parent()/to_child() for remaining components.
     fn jump_to_alias(&mut self, path: &str) -> StdResult<(), NavigateError> {
+        // Handle @self: set current_path to module_folder
+        // Luau will then call to_parent()/to_child() for remaining path
+        if path == "@self" || path.starts_with("@self/") || path.starts_with("@self\\") {
+            let base = self.module_folder.as_deref().unwrap_or(&self.script_dir);
+            self.current_path = base.to_path_buf();
+            return Ok(());
+        }
+
         self.current_path = self.resolve_module_path(path);
         Ok(())
     }
