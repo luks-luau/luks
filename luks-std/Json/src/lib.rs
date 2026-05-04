@@ -82,12 +82,12 @@ unsafe fn lua_value_to_json(
                             max_index = max_index.max(key_num as i32);
                         } else {
                             is_array = false;
-                            lua_pop(l, 1);
+                            lua_pop(l, 2); // pop value and key
                             break;
                         }
                     } else {
                         is_array = false;
-                        lua_pop(l, 1);
+                        lua_pop(l, 2); // pop value and key
                         break;
                     }
                     lua_pop(l, 1);
