@@ -1,9 +1,30 @@
+#![allow(unsafe_op_in_unsafe_fn)]
+
 use mlua_sys::luau::*;
 use std::ffi::{CStr, CString};
 use std::ptr;
 
+/// Helper to convert a Rust string to CString, replacing null bytes with U+FFFD
+fn str_to_cstring(s: &str) -> CString {
+    let sanitized = s.replace('\0', "\u{FFFD}");
+    CString::new(sanitized).expect("Failed to create CString after sanitization")
+}
+
+/// Raise a Lua error with the given message. This will be catchable with pcall.
+unsafe fn lua_error_msg(l: *mut lua_State, msg: &str) -> ! {
+    unsafe {
+        let cstr = str_to_cstring(msg);
+        lua_pushstring(l, cstr.as_ptr());
+        lua_error(l);
+    }
+}
+
 /// Convert Lua value at index `idx` to serde_json::Value
-unsafe fn lua_value_to_json(l: *mut lua_State, idx: i32) -> serde_json::Value {
+unsafe fn lua_value_to_json(
+    l: *mut lua_State,
+    idx: i32,
+    stack: &mut Vec<usize>,
+) -> serde_json::Value {
     unsafe {
         let t = lua_type(l, idx);
 
@@ -15,6 +36,10 @@ unsafe fn lua_value_to_json(l: *mut lua_State, idx: i32) -> serde_json::Value {
             }
             LUA_TNUMBER => {
                 let n = lua_tonumber(l, idx);
+                // Handle NaN and Infinity - raise Lua error
+                if n.is_nan() || n.is_infinite() {
+                    lua_error_msg(l, "JSON encode error: cannot encode NaN or Infinity");
+                }
                 // Try to convert to i64 first, then f64
                 if n.fract() == 0.0 && n >= i64::MIN as f64 && n <= i64::MAX as f64 {
                     serde_json::Value::Number(serde_json::Number::from(n as i64))
@@ -35,6 +60,15 @@ unsafe fn lua_value_to_json(l: *mut lua_State, idx: i32) -> serde_json::Value {
             }
             LUA_TTABLE => {
                 let idx = lua_absindex(l, idx);
+                // Get table pointer for cycle detection
+                let table_ptr = lua_topointer(l, idx) as usize;
+                // Check if we're already processing this table (cycle)
+                if stack.contains(&table_ptr) {
+                    lua_error_msg(l, "JSON encode error: circular reference detected");
+                }
+                // Add to stack
+                stack.push(table_ptr);
+
                 // Determine if array or object by checking keys
                 let mut is_array = true;
                 let mut max_index = 0;
@@ -59,35 +93,50 @@ unsafe fn lua_value_to_json(l: *mut lua_State, idx: i32) -> serde_json::Value {
                     lua_pop(l, 1);
                 }
 
-                if is_array && max_index > 0 {
+                let result = if is_array && max_index > 0 {
                     // Array
                     let mut arr = Vec::new();
                     for i in 1..=max_index {
                         lua_rawgeti(l, idx, i as i64);
-                        arr.push(lua_value_to_json(l, -1));
+                        arr.push(lua_value_to_json(l, -1, stack));
                         lua_pop(l, 1);
                     }
                     serde_json::Value::Array(arr)
                 } else {
-                    // Object
+                    // Object - handle both string and numeric keys
                     let mut obj = serde_json::Map::new();
                     lua_pushnil(l);
                     while lua_next(l, idx) != 0 {
                         let key_type = lua_type(l, -2);
-                        if key_type == LUA_TSTRING {
+                        let key = if key_type == LUA_TSTRING {
                             let key_str = lua_tolstring(l, -2, ptr::null_mut());
-                            if !key_str.is_null() {
-                                let key = CStr::from_ptr(key_str).to_string_lossy().into_owned();
-                                let value = lua_value_to_json(l, -1);
-                                obj.insert(key, value);
+                            if key_str.is_null() {
+                                lua_pop(l, 1);
+                                continue;
                             }
-                        }
+                            CStr::from_ptr(key_str).to_string_lossy().into_owned()
+                        } else if key_type == LUA_TNUMBER {
+                            let key_num = lua_tonumber(l, -2);
+                            format!("{}", key_num)
+                        } else {
+                            // Unsupported key type, skip
+                            lua_pop(l, 1);
+                            continue;
+                        };
+                        let value = lua_value_to_json(l, -1, stack);
+                        obj.insert(key, value);
                         lua_pop(l, 1);
                     }
                     serde_json::Value::Object(obj)
-                }
+                };
+
+                // Remove from stack after processing
+                stack.pop();
+                result
             }
-            _ => serde_json::Value::Null,
+            _ => {
+                lua_error_msg(l, &format!("JSON encode error: unsupported type {:?}", t));
+            }
         }
     }
 }
@@ -112,7 +161,7 @@ unsafe fn json_value_to_lua(l: *mut lua_State, value: &serde_json::Value) {
                 }
             }
             serde_json::Value::String(s) => {
-                let cstr = CString::new(s.as_str()).unwrap();
+                let cstr = str_to_cstring(s.as_str());
                 lua_pushstring(l, cstr.as_ptr());
             }
             serde_json::Value::Array(arr) => {
@@ -128,7 +177,7 @@ unsafe fn json_value_to_lua(l: *mut lua_State, value: &serde_json::Value) {
                 lua_createtable(l, 0, obj.len().max(1) as i32);
                 let table_idx = lua_absindex(l, -1);
                 for (k, v) in obj {
-                    let key_cstr = CString::new(k.as_str()).unwrap();
+                    let key_cstr = str_to_cstring(k.as_str());
                     lua_pushstring(l, key_cstr.as_ptr());
                     json_value_to_lua(l, v);
                     lua_settable(l, table_idx);
@@ -143,22 +192,21 @@ unsafe extern "C-unwind" fn lua_encode(l: *mut lua_State) -> i32 {
     unsafe {
         let argc = lua_gettop(l);
         if argc < 1 {
-            lua_pushnil(l);
-            return 1;
+            lua_error_msg(l, "JSON encode error: expected at least 1 argument");
         }
 
-        let value = lua_value_to_json(l, 1);
+        let mut stack = Vec::new();
+        let value = lua_value_to_json(l, 1, &mut stack);
         match serde_json::to_string(&value) {
             Ok(json_str) => {
-                let cstr = CString::new(json_str).unwrap();
+                let cstr = str_to_cstring(&json_str);
                 lua_pushstring(l, cstr.as_ptr());
+                1
             }
             Err(e) => {
-                let err_cstr = CString::new(format!("JSON encode error: {}", e)).unwrap();
-                lua_pushstring(l, err_cstr.as_ptr());
+                lua_error_msg(l, &format!("JSON encode error: {}", e));
             }
         }
-        1
     }
 }
 
@@ -167,14 +215,12 @@ unsafe extern "C-unwind" fn lua_decode(l: *mut lua_State) -> i32 {
     unsafe {
         let argc = lua_gettop(l);
         if argc < 1 {
-            lua_pushnil(l);
-            return 1;
+            lua_error_msg(l, "JSON decode error: expected at least 1 argument");
         }
 
         let json_str = lua_tolstring(l, 1, ptr::null_mut());
         if json_str.is_null() {
-            lua_pushnil(l);
-            return 1;
+            lua_error_msg(l, "JSON decode error: expected string argument");
         }
 
         let json_str = CStr::from_ptr(json_str).to_string_lossy().into_owned();
@@ -184,9 +230,7 @@ unsafe extern "C-unwind" fn lua_decode(l: *mut lua_State) -> i32 {
                 1
             }
             Err(e) => {
-                let err_cstr = CString::new(format!("JSON decode error: {}", e)).unwrap();
-                lua_pushstring(l, err_cstr.as_ptr());
-                1
+                lua_error_msg(l, &format!("JSON decode error: {}", e));
             }
         }
     }
