@@ -17,12 +17,14 @@ When creating a native module for Luau, you must export a function named `luau_e
 - Typically returns a table containing the module's functions and values
 
 ```rust
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C-unwind" fn luau_export(l: *mut lua_State) -> i32 {
-    // Create and return a table with module functions
-    lua_createtable(l, 0, 2);
-    // ... push functions and values
-    1 // Return 1 to indicate one value (the table) was pushed
+    unsafe {
+        // Create and return a table with module functions
+        lua_createtable(l, 0, 2);
+        // ... push functions and values
+        1 // Return 1 to indicate one value (the table) was pushed
+    }
 }
 ```
 
