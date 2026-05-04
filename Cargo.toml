@@ -3,7 +3,8 @@ members = [
     "crates/mlua-luau-scheduler",
     "crates/luksruntime",
     "crates/lukscli",
-    "tests/dlopen/source"
+    "tests/dlopen/source",
+    "luks-std/Json"
 ]
 resolver = "2"
 
