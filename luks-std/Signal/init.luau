@@ -54,7 +54,7 @@ type ConnectionInternal<T...> = {
     _callback: (T...) -> (),
 }
 
-type SignalInternal<T...> = {
+export type SignalInternal<T...> = {
     _head: ConnectionInternal<T...>?,
     --[[
         Connects a callback to be fired when the signal fires.
