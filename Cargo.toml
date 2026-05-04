@@ -6,7 +6,8 @@ members = [
     "tests/dlopen/source",
     "luks-std/std-template",
     "luks-std/Json",
-    "luks-std/Http"
+    "luks-std/Http",
+    "luks-std/WebSocket"
 ]
 resolver = "2"
 
