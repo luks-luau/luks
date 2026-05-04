@@ -125,15 +125,31 @@ impl Require for LuksRequirer {
     fn reset(&mut self, chunk_name: &str) -> StdResult<(), NavigateError> {
         let chunk_name = chunk_name.strip_prefix('@').unwrap_or(chunk_name);
 
-        // Set current_path to the file path, not the directory.
-        // Luau will call `to_parent` when directory navigation is needed.
-        self.current_path = PathBuf::from(chunk_name);
-
-        // script_dir is used to resolve `@self/` aliases.
-        self.script_dir = Path::new(chunk_name)
+        let path = Path::new(chunk_name);
+        let parent_dir = path
             .parent()
             .map(|p| p.to_path_buf())
             .unwrap_or_else(|| PathBuf::from("."));
+
+        // If this is an init.luau or init.lua file, the "module" is the directory
+        // containing the init file, not the file itself.
+        // We set current_path to the module folder so navigation works correctly.
+        let filename = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
+        if filename == "init.luau" || filename == "init.lua" {
+            // current_path should be the module folder (parent of init.luau)
+            self.current_path = parent_dir.clone();
+            // script_dir should be the grandparent (for resolving @self/ and relative paths)
+            self.script_dir = parent_dir
+                .parent()
+                .map(|p| p.to_path_buf())
+                .unwrap_or(parent_dir.clone());
+        } else {
+            // Set current_path to the file path, not the directory.
+            // Luau will call `to_parent` when directory navigation is needed.
+            self.current_path = PathBuf::from(chunk_name);
+            // script_dir is the parent directory
+            self.script_dir = parent_dir;
+        }
 
         Ok(())
     }
