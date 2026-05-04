@@ -20,7 +20,7 @@ pub fn resolve_from_base(base: &Path, input: &str) -> PathBuf {
         .strip_prefix("@self/")
         .or_else(|| input.strip_prefix("@self\\"))
     {
-        return base_abs.join(rest);
+        return normalize_path(&base_abs.join(rest));
     }
 
     if input == "@self" {

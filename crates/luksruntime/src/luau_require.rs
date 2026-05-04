@@ -169,15 +169,12 @@ impl Require for LuksRequirer {
         Ok(())
     }
 
-    /// Jumps to an alias path (absolute or fully relative).
-    /// For @self paths, sets current_path to module_folder, then lets Luau
-    /// navigate using to_parent()/to_child() for remaining components.
+    /// Jumps to an alias target path (absolute or fully relative).
+    /// If an alias target uses `@self`, resolve it from the module folder.
     fn jump_to_alias(&mut self, path: &str) -> StdResult<(), NavigateError> {
-        // Handle @self: set current_path to module_folder
-        // Luau will then call to_parent()/to_child() for remaining path
         if path == "@self" || path.starts_with("@self/") || path.starts_with("@self\\") {
             let base = self.module_folder.as_deref().unwrap_or(&self.script_dir);
-            self.current_path = base.to_path_buf();
+            self.current_path = crate::path_resolution::resolve_from_base(base, path);
             return Ok(());
         }
 
@@ -187,8 +184,8 @@ impl Require for LuksRequirer {
 
     /// Moves to parent directory.
     fn to_parent(&mut self) -> StdResult<(), NavigateError> {
-        if !self.current_path.as_os_str().is_empty() {
-            self.current_path.pop();
+        if self.current_path.as_os_str().is_empty() || !self.current_path.pop() {
+            return Err(NavigateError::NotFound);
         }
         Ok(())
     }
@@ -254,5 +251,57 @@ impl Require for LuksRequirer {
                 .into_function()
         }))
         .unwrap_or_else(|_| Err(mlua::Error::runtime("internal panic while loading module")))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use mlua::Lua;
+    use std::fs;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    #[test]
+    fn self_parent_resolves_to_init_module() {
+        let root = std::env::temp_dir().join(format!(
+            "luks_require_self_parent_{}",
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+
+        let http_dir = root.join("luks-std").join("Http");
+        let signal_dir = root.join("luks-std").join("Signal");
+        fs::create_dir_all(&http_dir).unwrap();
+        fs::create_dir_all(&signal_dir).unwrap();
+
+        fs::write(
+            http_dir.join("init.luau"),
+            r#"
+                local Signal = require("@self/../Signal")
+                return { signal = Signal.kind }
+            "#,
+        )
+        .unwrap();
+        fs::write(
+            signal_dir.join("init.luau"),
+            r#"return { kind = "signal-init" }"#,
+        )
+        .unwrap();
+
+        let lua = Lua::new();
+        let require = lua.create_require_function(LuksRequirer::new()).unwrap();
+        lua.globals().set("require", require).unwrap();
+
+        let main_path = root.join("main.luau");
+        let result: String = lua
+            .load(r#"return require("./luks-std/Http").signal"#)
+            .set_name(main_path.to_string_lossy())
+            .eval()
+            .unwrap();
+
+        fs::remove_dir_all(&root).unwrap();
+        assert_eq!(result, "signal-init");
     }
 }
