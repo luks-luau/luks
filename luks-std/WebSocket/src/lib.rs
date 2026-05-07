@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use std::ffi::{CStr, CString};
 use std::net::TcpStream;
 use std::ptr;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use std::sync::atomic::{AtomicI64, Ordering};
 use std::time::Duration;
 use tungstenite::stream::MaybeTlsStream;
@@ -15,26 +15,30 @@ use tungstenite::{Message, WebSocket};
 // Global connection registry
 // ---------------------------------------------------------------------------
 
-struct WsConnection {
+struct WsConnectionInner {
     socket: WebSocket<MaybeTlsStream<TcpStream>>,
     url: String,
 }
 
+// SAFETY: WsConnectionInner contains a TcpStream which is Send.
+// We wrap in Arc<Mutex<_>> for safe shared access across scheduler tasks.
+unsafe impl Send for WsConnectionInner {}
+unsafe impl Sync for WsConnectionInner {}
+
+type SharedConnection = Arc<Mutex<WsConnectionInner>>;
+
 static NEXT_ID: AtomicI64 = AtomicI64::new(1);
+static CONNECTIONS: Mutex<Option<HashMap<i64, SharedConnection>>> = Mutex::new(None);
 
-// SAFETY: WsConnection contains a TcpStream which is Send but not Sync.
-// We wrap in Mutex which makes it Sync. Only accessed through the lock.
-unsafe impl Send for WsConnection {}
-
-static CONNECTIONS: Mutex<Option<HashMap<i64, WsConnection>>> = Mutex::new(None);
-
-fn with_connections<F, R>(f: F) -> R
+fn with_connection<F, R>(id: i64, f: F) -> Option<R>
 where
-    F: FnOnce(&mut HashMap<i64, WsConnection>) -> R,
+    F: FnOnce(&mut WsConnectionInner) -> R,
 {
-    let mut guard = CONNECTIONS.lock().unwrap_or_else(|e| e.into_inner());
-    let map = guard.get_or_insert_with(HashMap::new);
-    f(map)
+    let guard = CONNECTIONS.lock().unwrap_or_else(|e| e.into_inner());
+    let map = guard.as_ref()?;
+    let conn = map.get(&id)?;
+    let mut inner = conn.lock().unwrap_or_else(|e| e.into_inner());
+    Some(f(&mut inner))
 }
 
 // ---------------------------------------------------------------------------
@@ -164,9 +168,10 @@ unsafe extern "C-unwind" fn lua_ws_connect(l: *mut lua_State) -> i32 {
     }
 
     let id = NEXT_ID.fetch_add(1, Ordering::Relaxed);
-    with_connections(|map| {
-        map.insert(id, WsConnection { socket, url });
-    });
+    let conn = Arc::new(Mutex::new(WsConnectionInner { socket, url }));
+    let mut guard = CONNECTIONS.lock().unwrap_or_else(|e| e.into_inner());
+    let map = guard.get_or_insert_with(HashMap::new);
+    map.insert(id, conn);
     lua_pushinteger(l, id);
     1
 }
@@ -186,10 +191,7 @@ unsafe extern "C-unwind" fn lua_ws_send(l: *mut lua_State) -> i32 {
         None => lua_raise(l, "ws_send: argument #2 must be a string message"),
     };
 
-    let result = with_connections(|map| {
-        let conn = map.get_mut(&id)?;
-        Some(conn.socket.send(Message::Text(message)))
-    });
+    let result = with_connection(id, |conn| conn.socket.send(Message::Text(message)));
 
     match result {
         None => lua_raise(l, "ws_send: invalid or closed handle"),
@@ -219,10 +221,7 @@ unsafe extern "C-unwind" fn lua_ws_send_binary(l: *mut lua_State) -> i32 {
         None => lua_raise(l, "ws_send_binary: argument #2 must be a string"),
     };
 
-    let result = with_connections(|map| {
-        let conn = map.get_mut(&id)?;
-        Some(conn.socket.send(Message::Binary(message.into_bytes())))
-    });
+    let result = with_connection(id, |conn| conn.socket.send(Message::Binary(message.into_bytes())));
 
     match result {
         None => lua_raise(l, "ws_send_binary: invalid or closed handle"),
@@ -247,10 +246,7 @@ unsafe extern "C-unwind" fn lua_ws_receive(l: *mut lua_State) -> i32 {
     }
     let id = lua_tointeger(l, 1);
 
-    let result = with_connections(|map| {
-        let conn = map.get_mut(&id)?;
-        Some(conn.socket.read())
-    });
+    let result = with_connection(id, |conn| conn.socket.read());
 
     match result {
         None => lua_raise(l, "ws_receive: invalid or closed handle"),
@@ -349,16 +345,17 @@ unsafe extern "C-unwind" fn lua_ws_close(l: *mut lua_State) -> i32 {
     };
     let reason = lua_get_string(l, 3).unwrap_or_default();
 
-    with_connections(|map| {
-        if let Some(conn) = map.get_mut(&id) {
+    let mut guard = CONNECTIONS.lock().unwrap_or_else(|e| e.into_inner());
+    if let Some(map) = guard.as_mut() {
+        if let Some(conn) = map.remove(&id) {
+            let mut inner = conn.lock().unwrap_or_else(|e| e.into_inner());
             let close_frame = tungstenite::protocol::CloseFrame {
                 code: tungstenite::protocol::frame::coding::CloseCode::from(code),
                 reason: reason.into(),
             };
-            let _ = conn.socket.close(Some(close_frame));
+            let _ = inner.socket.close(Some(close_frame));
         }
-        map.remove(&id);
-    });
+    }
 
     0
 }
@@ -372,11 +369,7 @@ unsafe extern "C-unwind" fn lua_ws_is_open(l: *mut lua_State) -> i32 {
     }
     let id = lua_tointeger(l, 1);
 
-    let open = with_connections(|map| {
-        map.get(&id)
-            .map(|conn| conn.socket.can_write())
-            .unwrap_or(false)
-    });
+    let open = with_connection(id, |conn| conn.socket.can_write()).unwrap_or(false);
 
     lua_pushboolean(l, if open { 1 } else { 0 });
     1
@@ -392,7 +385,7 @@ unsafe extern "C-unwind" fn lua_ws_url(l: *mut lua_State) -> i32 {
     }
     let id = lua_tointeger(l, 1);
 
-    let url = with_connections(|map| map.get(&id).map(|c| c.url.clone()));
+    let url = with_connection(id, |conn| conn.url.clone());
 
     match url {
         Some(u) => {
