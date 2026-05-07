@@ -225,7 +225,7 @@ unsafe fn lua_dlopen_impl(l: *mut ffi::lua_State) -> i32 {
             // Call export with main thread, then move results to current thread
             let nresults = export(main_l);
             // Move values from main thread stack to current thread stack
-            if nresults > 0 {
+            if nresults > 0 && main_l != l {
                 // lua_xmove requires both states to be different threads of the same global state.
                 // It also assumes that the source stack has at least nresults values on top.
                 ffi::lua_xmove(main_l, l, nresults);
