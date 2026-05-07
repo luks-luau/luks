@@ -52,10 +52,6 @@ pub enum Commands {
     #[command(alias = "v")]
     Version,
 
-    /// Shows help.
-    #[command(alias = "h")]
-    Help,
-
     /// Interactive REPL (used internally for fallback mode).
     #[command(hide = true)]
     Repl,
