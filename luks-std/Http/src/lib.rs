@@ -2,6 +2,7 @@ use mlua_sys::luau::*;
 use std::ffi::{CStr, CString};
 use std::ptr;
 use std::sync::Mutex;
+use ureq::AgentBuilder;
 
 /// Mutex to serialize HTTP requests (ureq is not thread-safe).
 static REQUEST_MUTEX: Mutex<()> = Mutex::new(());
@@ -210,15 +211,16 @@ unsafe fn handle_request(l: *mut lua_State, method: &str) -> i32 {
         }
     }
 
-    // Build request
+    // Build request using a new agent to avoid thread-safety issues with default agent
+    let agent = AgentBuilder::new().build();
     let method_upper = method_str.to_uppercase();
     let mut req = match method_upper.as_str() {
-        "GET" => ureq::get(&url),
-        "POST" => ureq::post(&url),
-        "PUT" => ureq::put(&url),
-        "DELETE" => ureq::delete(&url),
-        "PATCH" => ureq::patch(&url),
-        "HEAD" => ureq::head(&url),
+        "GET" => agent.get(&url),
+        "POST" => agent.post(&url),
+        "PUT" => agent.put(&url),
+        "DELETE" => agent.delete(&url),
+        "PATCH" => agent.patch(&url),
+        "HEAD" => agent.head(&url),
         _ => {
             unsafe {
                 push_error(l, &format!("Unsupported HTTP method: {}", method_str), 0);
