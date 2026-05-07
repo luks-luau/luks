@@ -34,10 +34,13 @@ fn with_connection<F, R>(id: i64, f: F) -> Option<R>
 where
     F: FnOnce(&mut WsConnectionInner) -> R,
 {
-    let guard = CONNECTIONS.lock().unwrap_or_else(|e| e.into_inner());
-    let map = guard.as_ref()?;
-    let conn = map.get(&id)?;
-    let mut inner = conn.lock().unwrap_or_else(|e| e.into_inner());
+    // Clone the Arc from the map, then release the global lock
+    let conn_arc = {
+        let guard = CONNECTIONS.lock().unwrap_or_else(|e| e.into_inner());
+        let map = guard.as_ref()?;
+        map.get(&id)?.clone()
+    }; // global lock released here
+    let mut inner = conn_arc.lock().unwrap_or_else(|e| e.into_inner());
     Some(f(&mut inner))
 }
 
