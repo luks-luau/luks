@@ -2,3 +2,5 @@ target/
 notes/
 .kilo/
 Cargo.lock
+
+	estDiscord.luau
