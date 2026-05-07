@@ -216,8 +216,17 @@ unsafe fn lua_dlopen_impl(l: *mut ffi::lua_State) -> i32 {
     let loader = loader::ModuleLoader::new();
     let path_str = path.to_string_lossy().to_string();
 
+    let main_l = lua_mainthread(l);
     match loader.load(&path_str) {
-        Ok(export) => export(lua_mainthread(l)),
+        Ok(export) => {
+            // Call export with main thread, then move results to current thread
+            let nresults = export(main_l);
+            // Move values from main thread stack to current thread stack
+            if nresults > 0 {
+                ffi::lua_xmove(main_l, l, nresults);
+            }
+            nresults
+        }
         Err(e) => lua_error(l, e),
     }
 }
