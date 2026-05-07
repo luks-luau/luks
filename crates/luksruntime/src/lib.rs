@@ -5,6 +5,11 @@ use std::os::raw::c_char;
 use std::ptr;
 use std::time::{Duration, Instant};
 
+// Luau C API: returns the main thread of the Lua state
+extern "C" {
+    fn lua_mainthread(L: *mut ffi::lua_State) -> *mut ffi::lua_State;
+}
+
 use async_io::Timer;
 use futures_lite::future::yield_now;
 use mlua_luau_scheduler::{Functions, Scheduler};
@@ -212,7 +217,7 @@ unsafe fn lua_dlopen_impl(l: *mut ffi::lua_State) -> i32 {
     let path_str = path.to_string_lossy().to_string();
 
     match loader.load(&path_str) {
-        Ok(export) => export(l),
+        Ok(export) => export(lua_mainthread(l)),
         Err(e) => lua_error(l, e),
     }
 }

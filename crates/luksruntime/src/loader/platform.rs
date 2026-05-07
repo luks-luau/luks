@@ -3,7 +3,12 @@ use libloading::{Library, Symbol};
 use std::path::Path;
 use std::sync::Mutex;
 
-/// Type of the `luau_export` entrypoint from loaded libraries.
+/// Entrypoint exportado por bibliotecas nativas carregadas via dlopen.
+///
+/// # Contrato:
+/// - O `lua_State` recebido é o **main thread** do runtime e é válido apenas durante esta chamada.
+/// - Não armazene o ponteiro `lua_State` para uso em threads nativas externas.
+/// - Funções registradas por esta DLL podem ser chamadas de qualquer corrotina, recebendo o `lua_State` da corrente atual.
 pub type LuauExport = unsafe extern "C-unwind" fn(*mut mlua::ffi::lua_State) -> i32;
 
 // Keep libraries alive for the process lifetime.
