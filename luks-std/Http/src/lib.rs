@@ -1,6 +1,10 @@
 use mlua_sys::luau::*;
 use std::ffi::{CStr, CString};
 use std::ptr;
+use std::sync::Mutex;
+
+/// Mutex to serialize HTTP requests (ureq is not thread-safe).
+static REQUEST_MUTEX: Mutex<()> = Mutex::new(());
 
 /// Parse headers from a Lua table at given index
 unsafe fn parse_headers(l: *mut lua_State, idx: i32) -> Vec<(String, String)> {
@@ -119,6 +123,9 @@ unsafe fn parse_timeout(l: *mut lua_State, idx: i32) -> Option<std::time::Durati
 
 /// Generic request handler
 unsafe fn handle_request(l: *mut lua_State, method: &str) -> i32 {
+    // Serialize HTTP requests to avoid issues with ureq thread safety
+    let _lock = REQUEST_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
+
     let argc = unsafe { lua_gettop(l) };
     if argc < 1 {
         unsafe {

@@ -217,12 +217,17 @@ unsafe fn lua_dlopen_impl(l: *mut ffi::lua_State) -> i32 {
     let path_str = path.to_string_lossy().to_string();
 
     let main_l = lua_mainthread(l);
+    if main_l.is_null() {
+        return lua_error(l, "dlopen: failed to get main thread");
+    }
     match loader.load(&path_str) {
         Ok(export) => {
             // Call export with main thread, then move results to current thread
             let nresults = export(main_l);
             // Move values from main thread stack to current thread stack
             if nresults > 0 {
+                // lua_xmove requires both states to be different threads of the same global state.
+                // It also assumes that the source stack has at least nresults values on top.
                 ffi::lua_xmove(main_l, l, nresults);
             }
             nresults
