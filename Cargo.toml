@@ -9,6 +9,7 @@ members = [
     "luks-std/Http",
     "luks-std/WebSocket",
     "luks-std/ZLib",
+    "luks-std/Crypto",
     "crates/luks-module-sys"
 ]
 resolver = "2"
