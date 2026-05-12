@@ -18,3 +18,4 @@ async-executor = "1.13"
 futures-lite = "2.6"
 tracing = "0.1"
 async-io = "2.4"
+luks-module-sys = { version = "0.1.0", path = "../luks-module-sys" }

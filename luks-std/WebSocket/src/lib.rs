@@ -1,6 +1,6 @@
 #![allow(unsafe_op_in_unsafe_fn)]
 
-use mlua_sys::luau::*;
+use luks_module_sys::*;
 use std::collections::HashMap;
 use std::ffi::{CStr, CString};
 use std::net::TcpStream;
@@ -410,7 +410,8 @@ unsafe extern "C-unwind" fn lua_ws_url(l: *mut lua_State) -> i32 {
 /// # Safety
 /// Called from Luau VM with a valid lua_State.
 #[unsafe(no_mangle)]
-pub unsafe extern "C-unwind" fn luau_export(l: *mut lua_State) -> i32 {
+pub unsafe extern "C-unwind" fn luau_export(l: *mut lua_State, api: *const LuauAPI) -> i32 {
+    init_api(api);
     lua_createtable(l, 0, 8);
 
     lua_pushstring(l, c"0.1.0".as_ptr());

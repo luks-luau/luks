@@ -5,7 +5,7 @@ local h = require("../../helpers")
 
 local function load_testmodule(expect)
     local ok, result = pcall(function()
-        return dlopen("@self/../../../target/release/testmodule")
+        return dlopen("@self/../../../target/debug/testmodule")
     end)
 
     expect.true_(ok, "dlopen should not raise for testmodule")
@@ -76,7 +76,7 @@ return function(expect)
 
         h.test("dlopen missing library raises luau error (pcall)", function()
             local ok, err = pcall(function()
-                dlopen("@self/../../../target/release/module_that_does_not_exist")
+                dlopen("@self/../../../target/debug/module_that_does_not_exist")
             end)
 
             expect.false_(ok, "pcall should capture dlopen load failure")

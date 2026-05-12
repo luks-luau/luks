@@ -8,7 +8,7 @@ members = [
     "luks-std/Json",
     "luks-std/Http",
     "luks-std/WebSocket"
-]
+, "crates/luks-module-sys"]
 resolver = "2"
 
 [workspace.package]

@@ -1,6 +1,6 @@
 #![allow(unsafe_op_in_unsafe_fn)]
 
-use mlua_sys::luau::*;
+use luks_module_sys::*;
 use std::ffi::{CStr, CString};
 use std::ptr;
 
@@ -242,8 +242,9 @@ unsafe extern "C-unwind" fn lua_decode(l: *mut lua_State) -> i32 {
 ///
 /// This function is called by the Luau VM and must only be invoked from a valid Lua state.
 #[unsafe(no_mangle)]
-pub unsafe extern "C-unwind" fn luau_export(l: *mut lua_State) -> i32 {
+pub unsafe extern "C-unwind" fn luau_export(l: *mut lua_State, api: *const LuauAPI) -> i32 {
     unsafe {
+        init_api(api);
         lua_createtable(l, 0, 2);
 
         lua_pushcfunction(l, lua_encode);

@@ -1,4 +1,4 @@
-use mlua_sys::luau::*;
+use luks_module_sys::*;
 use std::ffi::{CStr, CString};
 use std::ptr;
 
@@ -328,8 +328,9 @@ unsafe extern "C-unwind" fn lua_request(l: *mut lua_State) -> i32 {
 /// the Lua stack is in a proper state. This function creates and pushes
 /// a table containing HTTP functions onto the Lua stack.
 #[unsafe(no_mangle)]
-pub unsafe extern "C-unwind" fn luau_export(l: *mut lua_State) -> i32 {
+pub unsafe extern "C-unwind" fn luau_export(l: *mut lua_State, api: *const LuauAPI) -> i32 {
     unsafe {
+        init_api(api);
         lua_createtable(l, 0, 8);
 
         lua_pushstring(l, c"0.1.0".as_ptr());
