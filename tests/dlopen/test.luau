@@ -1,6 +1,6 @@
 print("\n--- Testing Module (Table) ---")
 local ok_mod, mymodule_or_err = pcall(function()
-    return dlopen("../../target/release/testmodule")
+    return dlopen("../../target/debug/testmodule")
 end)
 if ok_mod and type(mymodule_or_err) == "table" then
     local mymodule = mymodule_or_err
@@ -12,7 +12,7 @@ end
 
 print("\n--- Testing @self Alias ---")
 local ok_self, self_mod_or_err = pcall(function()
-    return dlopen("@self/../../target/release/testmodule")
+    return dlopen("@self/../../target/debug/testmodule")
 end)
 if ok_self and type(self_mod_or_err) == "table" then
     local self_mod = self_mod_or_err

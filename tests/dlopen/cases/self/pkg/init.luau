@@ -1,5 +1,5 @@
 local ok, native_or_err = pcall(function()
-    return dlopen("@self/../../../../../target/release/testmodule")
+    return dlopen("@self/../../../../../target/debug/testmodule")
 end)
 
 return {
