@@ -1,0 +1,203 @@
+--!strict
+
+--[[
+    Client Namespace — Base Object-Oriented Application orchestrator for luks-std/Discord.
+]]
+
+local Signal = require("../Signal")
+local Rest = require("./Rest")
+local Gateway = require("./Gateway")
+local Channel = require("./Structures/Channel")
+local User = require("./Structures/User")
+local Message = require("./Structures/Message")
+local Guild = require("./Structures/Guild")
+local Member = require("./Structures/Member")
+local Interaction = require("./Structures/Interaction")
+local VoiceState = require("./Structures/VoiceState")
+
+export type DiscordClient = {
+    --[[ Authentication API Token. ]]
+    token: string?,
+    
+    --[[ OAuth2 Application ID assigned to this bot. ]]
+    application_id: string?,
+    
+    --[[ Authenticated User entity representation (populated upon onReady). ]]
+    user: User.User?,
+    
+    --[[ Bitwise composed integer defining authorized Gateway event subscriptions. ]]
+    intents: number?,
+    
+    --[[ Internal REST API consumer interface. ]]
+    rest: Rest.RestClient,
+    
+    --[[ Internal stateful Gateway connection manager. ]]
+    gateway: Gateway.GatewayManager,
+
+    -- Strongly typed real-time execution signals
+    --[[ Triggered when the bot successfully completes initial Gateway handshake and caching loops. ]]
+    onReady: Signal.Signal<User.User>,
+    
+    --[[ Dispatched when a text message is received across accessible channels. ]]
+    onMessageCreate: Signal.Signal<Message.Message>,
+    
+    --[[ Fired when a guild becomes accessible or is joined. ]]
+    onGuildCreate: Signal.Signal<Guild.Guild>,
+    
+    --[[ Triggered by slash commands, button interactions, or modal popup submissions. ]]
+    onInteractionCreate: Signal.Signal<Interaction.Interaction>,
+    
+    --[[ Dispatched when a new user joins a monitored guild. ]]
+    onGuildMemberAdd: Signal.Signal<Member.Member>,
+    
+    --[[ Fired when a member departs or is removed from a server. ]]
+    onGuildMemberRemove: Signal.Signal<{ guild_id: string, user: User.User }>,
+    
+    --[[ Broadcasts real-time adjustments to user voice state presence. ]]
+    onVoiceStateUpdate: Signal.Signal<VoiceState.VoiceState>,
+    
+    --[[ Emitted when the underlying WebSocket drops connection permanently. ]]
+    onClose: Signal.Signal<{ code: number, reason: string }>,
+    
+    --[[ Dispatched upon unrecoverable protocol execution errors. ]]
+    onError: Signal.Signal<string>,
+
+    --[[ Authenticates and connects the client to the Discord API ecosystem. ]]
+    login: (self: DiscordClient, token: string?) -> (),
+    
+    --[[ Disconnects active socket streams and terminates polling intervals. ]]
+    close: (self: DiscordClient) -> (),
+    
+    --[[ Instantiates a channel entity interface mapped to a unique destination ID. ]]
+    getChannel: (self: DiscordClient, id: string) -> Channel.Channel,
+    
+    --[[ Broadcasts real-time status presence updates to the gateway stream. ]]
+    setStatus: (self: DiscordClient, presence: { status: string?, activities: { any }?, afk: boolean?, since: number? }) -> boolean,
+    
+    --[[ Overwrites or synchronizes global/guild Application Slash Commands against Discord REST registries. ]]
+    registerCommands: (self: DiscordClient, commands: { any }, guildId: string?) -> (boolean, any),
+
+    --[[ Directs the gateway layer to join, migrate, or leave a designated audio channel. ]]
+    joinVoiceChannel: (self: DiscordClient, guildId: string, channelId: string?, mute: boolean?, deaf: boolean?) -> boolean,
+}
+
+local Client = {}
+local ClientMT = {}
+ClientMT.__index = ClientMT
+
+--[[
+    Instantiates a fresh DiscordClient application host.
+]]
+function Client.new(options: { token: string?, intents: number?, application_id: string? }?): DiscordClient
+    local opts = options or {}
+    
+    local onReadySig = Signal.new()
+    local onMessageSig = Signal.new()
+    local onGuildSig = Signal.new()
+    local onInteractionSig = Signal.new()
+    local onMemberAddSig = Signal.new()
+    local onMemberRemoveSig = Signal.new()
+    local onVoiceStateSig = Signal.new()
+    local onCloseSig = Signal.new()
+    local onErrorSig = Signal.new()
+
+    local self = {
+        token = opts.token,
+        application_id = opts.application_id,
+        user = nil,
+        intents = opts.intents,
+        
+        onReady = onReadySig:Public(),
+        onMessageCreate = onMessageSig:Public(),
+        onGuildCreate = onGuildSig:Public(),
+        onInteractionCreate = onInteractionSig:Public(),
+        onGuildMemberAdd = onMemberAddSig:Public(),
+        onGuildMemberRemove = onMemberRemoveSig:Public(),
+        onVoiceStateUpdate = onVoiceStateSig:Public(),
+        onClose = onCloseSig:Public(),
+        onError = onErrorSig:Public(),
+    }
+
+    self.rest = Rest.new(self)
+    self.gateway = Gateway.new(self)
+
+    ;(self.gateway :: any)._client = {
+        token = self.token,
+        application_id = self.application_id,
+        intents = self.intents,
+        rest = self.rest,
+        onReady = onReadySig,
+        onMessageCreate = onMessageSig,
+        onGuildCreate = onGuildSig,
+        onInteractionCreate = onInteractionSig,
+        onGuildMemberAdd = onMemberAddSig,
+        onGuildMemberRemove = onMemberRemoveSig,
+        onVoiceStateUpdate = onVoiceStateSig,
+        onClose = onCloseSig,
+        onError = onErrorSig,
+    }
+
+    setmetatable(self, ClientMT)
+    return (self :: any) :: DiscordClient
+end
+
+function ClientMT:login(token: string?)
+    if token then
+        self.token = token
+        ;(self.gateway :: any)._client.token = token
+    end
+    if not self.token or self.token == "" then
+        error("[Discord.Client] A valid authentication token is mandatory to establish connection streams.")
+    end
+
+    print("[Discord.Client] Establishing connection loops to the Discord ecosystem...")
+    self.gateway:connect()
+end
+
+function ClientMT:close()
+    print("[Discord.Client] Disconnecting and tearing down the bot execution context...")
+    self.gateway:disconnect()
+end
+
+function ClientMT:getChannel(id: string): Channel.Channel
+    return Channel.new({ id = tostring(id) }, self.rest)
+end
+
+function ClientMT:setStatus(presence: { status: string?, activities: { any }?, afk: boolean?, since: number? }): boolean
+    local p = {
+        status = presence.status or "online",
+        since = presence.since or 0,
+        afk = presence.afk == true,
+        activities = presence.activities or {},
+    }
+    return self.gateway:sendPresence(p)
+end
+
+function ClientMT:registerCommands(commands: { any }, guildId: string?): (boolean, any)
+    local appId = self.application_id
+    if not appId or appId == "" then
+        if self.user and self.user.id and self.user.id ~= "" then
+            appId = self.user.id
+            self.application_id = appId
+        else
+            return false, "application_id is unavailable. Please provide the application_id parameter inside Client.new() options or await the onReady runtime signal."
+        end
+    end
+
+    local endpoint = ""
+    if guildId and guildId ~= "" then
+        endpoint = "/applications/" .. appId .. "/guilds/" .. guildId .. "/commands"
+    else
+        endpoint = "/applications/" .. appId .. "/commands"
+    end
+
+    return self.rest:put(endpoint, commands)
+end
+
+function ClientMT:joinVoiceChannel(guildId: string, channelId: string?, mute: boolean?, deaf: boolean?): boolean
+    return self.gateway:sendVoiceStateUpdate(guildId, channelId, mute, deaf)
+end
+
+table.freeze(ClientMT)
+table.freeze(Client)
+return Client
