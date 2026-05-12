@@ -212,8 +212,15 @@ The test suite uses a modular framework with auto-discovery:
 # Build the CLI first
 cargo build --release
 
-# Run the test suite
+# Run the complete test suite
 .\target\release\lukscli.exe .\tests\main.luau
+# or on Unix
+./target/release/lukscli ./tests/main.luau
+
+# Run isolated test suites by providing category trailing arguments
+.\target\release\lukscli.exe .\tests\main.luau zlib process signal
+# or using target/debug if developing
+./target/debug/lukscli tests/main.luau zlib process signal
 ```
 
 #### Adding New Tests

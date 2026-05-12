@@ -122,6 +122,20 @@ task.wait(0.5)
 print("Done waiting in main thread")
 ```
 
+## Standard Library (`luks-std`)
+
+The workspace hosts a collection of highly-optimized native extensions implemented in Rust under the `luks-std/` directory. These submodules link seamlessly into the runtime to bridge OS capabilities directly to Luau logic:
+
+- **[`Process`](https://github.com/luks-luau/luks/blob/main/luks-std/Process/README.md)**: High-performance subprocess execution, custom environment mapping, pipeline binding, and CPU/OS host telemetry.
+- **[`Signal`](https://github.com/luks-luau/luks/blob/main/luks-std/Signal/README.md)**: Asynchronous event systems and callback dispatchers built for robust native thread communication.
+- **[`Http`](https://github.com/luks-luau/luks/blob/main/luks-std/Http/README.md)**: Non-blocking client requests powered by dynamic TLS integrations.
+- **[`WebSocket`](https://github.com/luks-luau/luks/blob/main/luks-std/WebSocket/README.md)**: Full-duplex asynchronous communication protocol supporting robust TLS socket channels.
+- **[`Json`](https://github.com/luks-luau/luks/blob/main/luks-std/Json/README.md)**: Direct, ultra-fast structural encoding and decoding mapping directly to dynamic Lua values.
+- **[`ZLib`](https://github.com/luks-luau/luks/blob/main/luks-std/ZLib/README.md)**: Native payload compression and decompression utilities.
+- **[`Crypto`](https://github.com/luks-luau/luks/blob/main/luks-std/Crypto/README.md)**: Secure hash algorithms and CSPRNG random generators.
+- **[`Discord`](https://github.com/luks-luau/luks/blob/main/luks-std/Discord/README.md)**: Native API wrapper and real-time gateway integrations for rich application development.
+- **[`std-template`](https://github.com/luks-luau/luks/blob/main/luks-std/std-template/README.md)**: Centralized boilerplate skeleton to guide contributors in crafting reliable and secure Luau FFI submodules.
+
 ## Building
 
 ```bash
