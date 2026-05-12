@@ -1,0 +1,18 @@
+[package]
+name = "crypto"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+luks-module-sys = { path = "../../crates/luks-module-sys" }
+sha2 = "0.10"
+md-5 = "0.10"
+sha1 = "0.10"
+hmac = "0.12"
+aes-gcm = "0.10"
+hex = "0.4"
+base64 = "0.22"
+rand = "0.8"
