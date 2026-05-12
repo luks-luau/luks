@@ -41,7 +41,11 @@ pub struct Cli {
 pub enum Commands {
     /// Runs a Luau script.
     #[command(alias = "r")]
-    Run { path: PathBuf },
+    Run {
+        path: PathBuf,
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        args: Vec<String>,
+    },
 
     /// Evaluates one-shot Luau code.
     Eval {

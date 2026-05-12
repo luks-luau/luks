@@ -18,7 +18,7 @@ pub fn run_repl() -> Result<()> {
             Ok(line) => {
                 // Persist history and execute each non-control line.
                 rl.add_history_entry(&line)?;
-                if let Err(e) = rt.execute(&line, "<repl>") {
+                if let Err(e) = rt.execute(&line, "<repl>", &[]) {
                     eprintln!("[ERR] {}", e);
                 }
             }
