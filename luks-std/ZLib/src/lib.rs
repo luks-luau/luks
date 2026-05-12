@@ -1,7 +1,7 @@
 #![allow(unsafe_op_in_unsafe_fn)]
 
-use flate2::write::{ZlibDecoder, ZlibEncoder};
 use flate2::Compression;
+use flate2::write::{ZlibDecoder, ZlibEncoder};
 use luks_module_sys::*;
 use std::ffi::CString;
 use std::io::Write;
@@ -32,7 +32,10 @@ unsafe extern "C-unwind" fn lua_compress(l: *mut lua_State) -> i32 {
     unsafe {
         let argc = lua_gettop(l);
         if argc < 1 {
-            lua_error_msg(l, "ZLib.compress error: expected at least 1 argument (data)");
+            lua_error_msg(
+                l,
+                "ZLib.compress error: expected at least 1 argument (data)",
+            );
         }
 
         let mut len: usize = 0;
@@ -95,7 +98,10 @@ unsafe extern "C-unwind" fn lua_decompress(l: *mut lua_State) -> i32 {
         if let Err(e) = decoder.write_all(data) {
             lua_error_msg(
                 l,
-                &format!("ZLib.decompress error: invalid or corrupted zlib data: {}", e),
+                &format!(
+                    "ZLib.decompress error: invalid or corrupted zlib data: {}",
+                    e
+                ),
             );
         }
         match decoder.finish() {
