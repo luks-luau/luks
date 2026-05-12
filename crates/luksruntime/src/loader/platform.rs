@@ -42,7 +42,6 @@ pub static HOST_LUAU_API: luks_module_sys::LuauAPI = luks_module_sys::LuauAPI {
     lua_tointegerx: mlua_sys::luau::lua_tointegerx,
     lua_toboolean: mlua_sys::luau::lua_toboolean,
     lua_topointer: mlua_sys::luau::lua_topointer,
-
 };
 
 unsafe extern "C-unwind" fn wrap_lua_pushstring(

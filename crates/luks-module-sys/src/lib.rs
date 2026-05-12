@@ -28,7 +28,8 @@ pub struct LuauAPI {
     pub lua_call: unsafe extern "C-unwind" fn(*mut lua_State, c_int, c_int),
 
     pub lua_pushlstring: unsafe fn(*mut lua_State, *const c_char, usize) -> *const c_char,
-    pub lua_tolstring: unsafe extern "C-unwind" fn(*mut lua_State, c_int, *mut usize) -> *const c_char,
+    pub lua_tolstring:
+        unsafe extern "C-unwind" fn(*mut lua_State, c_int, *mut usize) -> *const c_char,
     pub lua_gettop: unsafe extern "C-unwind" fn(*mut lua_State) -> c_int,
     pub lua_settop: unsafe extern "C-unwind" fn(*mut lua_State, c_int),
     pub lua_remove: unsafe extern "C-unwind" fn(*mut lua_State, c_int),
@@ -43,8 +44,8 @@ pub struct LuauAPI {
     pub lua_tonumberx: unsafe extern "C-unwind" fn(*mut lua_State, c_int, *mut c_int) -> f64,
     pub lua_tointegerx: unsafe fn(*mut lua_State, c_int, *mut c_int) -> i64,
     pub lua_toboolean: unsafe extern "C-unwind" fn(*mut lua_State, c_int) -> c_int,
-    pub lua_topointer: unsafe extern "C-unwind" fn(*mut lua_State, c_int) -> *const std::ffi::c_void,
-
+    pub lua_topointer:
+        unsafe extern "C-unwind" fn(*mut lua_State, c_int) -> *const std::ffi::c_void,
 }
 
 static mut API: *const LuauAPI = std::ptr::null();
@@ -246,126 +247,221 @@ pub unsafe fn lua_call(l: *mut lua_State, nargs: c_int, nresults: c_int) {
     ((*API).lua_call)(l, nargs, nresults)
 }
 
+/// # Safety
+/// - `l` must be a valid pointer to a `lua_State`.
+/// - The global `API` VTable must have been initialized via `init_api`.
 #[inline(always)]
 pub unsafe fn lua_pushlstring(l: *mut lua_State, s: *const c_char, len: usize) -> *const c_char {
     ((*API).lua_pushlstring)(l, s, len)
 }
 
+/// # Safety
+/// - `l` must be a valid pointer to a `lua_State`.
+/// - The global `API` VTable must have been initialized via `init_api`.
 #[inline(always)]
 pub unsafe fn lua_tolstring(l: *mut lua_State, idx: c_int, len: *mut usize) -> *const c_char {
     ((*API).lua_tolstring)(l, idx, len)
 }
 
+/// # Safety
+/// - `l` must be a valid pointer to a `lua_State`.
+/// - The global `API` VTable must have been initialized via `init_api`.
 #[inline(always)]
 pub unsafe fn lua_gettop(l: *mut lua_State) -> c_int {
     ((*API).lua_gettop)(l)
 }
 
+/// # Safety
+/// - `l` must be a valid pointer to a `lua_State`.
+/// - The global `API` VTable must have been initialized via `init_api`.
 #[inline(always)]
 pub unsafe fn lua_settop(l: *mut lua_State, idx: c_int) {
     ((*API).lua_settop)(l, idx)
 }
 
+/// # Safety
+/// - `l` must be a valid pointer to a `lua_State`.
+/// - The global `API` VTable must have been initialized via `init_api`.
 #[inline(always)]
 pub unsafe fn lua_remove(l: *mut lua_State, idx: c_int) {
     ((*API).lua_remove)(l, idx)
 }
 
+/// # Safety
+/// - `l` must be a valid pointer to a `lua_State`.
+/// - The global `API` VTable must have been initialized via `init_api`.
 #[inline(always)]
 pub unsafe fn lua_insert(l: *mut lua_State, idx: c_int) {
     ((*API).lua_insert)(l, idx)
 }
 
+/// # Safety
+/// - `l` must be a valid pointer to a `lua_State`.
+/// - The global `API` VTable must have been initialized via `init_api`.
 #[inline(always)]
 pub unsafe fn lua_absindex(l: *mut lua_State, idx: c_int) -> c_int {
     ((*API).lua_absindex)(l, idx)
 }
 
+/// # Safety
+/// - `l` must be a valid pointer to a `lua_State`.
+/// - The global `API` VTable must have been initialized via `init_api`.
 #[inline(always)]
 pub unsafe fn lua_gettable(l: *mut lua_State, idx: c_int) -> c_int {
     ((*API).lua_gettable)(l, idx)
 }
 
+/// # Safety
+/// - `l` must be a valid pointer to a `lua_State`.
+/// - The global `API` VTable must have been initialized via `init_api`.
 #[inline(always)]
 pub unsafe fn lua_settable(l: *mut lua_State, idx: c_int) {
     ((*API).lua_settable)(l, idx)
 }
 
+/// # Safety
+/// - `l` must be a valid pointer to a `lua_State`.
+/// - The global `API` VTable must have been initialized via `init_api`.
 #[inline(always)]
 pub unsafe fn lua_rawgeti(l: *mut lua_State, idx: c_int, n: i64) -> c_int {
     ((*API).lua_rawgeti)(l, idx, n)
 }
 
+/// # Safety
+/// - `l` must be a valid pointer to a `lua_State`.
+/// - The global `API` VTable must have been initialized via `init_api`.
 #[inline(always)]
 pub unsafe fn lua_rawseti(l: *mut lua_State, idx: c_int, n: i64) {
     ((*API).lua_rawseti)(l, idx, n)
 }
 
+/// # Safety
+/// - `l` must be a valid pointer to a `lua_State`.
+/// - The global `API` VTable must have been initialized via `init_api`.
 #[inline(always)]
 pub unsafe fn lua_next(l: *mut lua_State, idx: c_int) -> c_int {
     ((*API).lua_next)(l, idx)
 }
 
+/// # Safety
+/// - `l` must be a valid pointer to a `lua_State`.
+/// - The global `API` VTable must have been initialized via `init_api`.
 #[inline(always)]
 pub unsafe fn lua_error(l: *mut lua_State) -> ! {
     ((*API).lua_error)(l)
 }
 
+/// # Safety
+/// - `l` must be a valid pointer to a `lua_State`.
+/// - The global `API` VTable must have been initialized via `init_api`.
 #[inline(always)]
 pub unsafe fn lua_tonumberx(l: *mut lua_State, idx: c_int, isnum: *mut c_int) -> f64 {
     ((*API).lua_tonumberx)(l, idx, isnum)
 }
 
+/// # Safety
+/// - `l` must be a valid pointer to a `lua_State`.
+/// - The global `API` VTable must have been initialized via `init_api`.
 #[inline(always)]
 pub unsafe fn lua_tointegerx(l: *mut lua_State, idx: c_int, isnum: *mut c_int) -> i64 {
     ((*API).lua_tointegerx)(l, idx, isnum)
 }
 
+/// # Safety
+/// - `l` must be a valid pointer to a `lua_State`.
+/// - The global `API` VTable must have been initialized via `init_api`.
 #[inline(always)]
 pub unsafe fn lua_toboolean(l: *mut lua_State, idx: c_int) -> c_int {
     ((*API).lua_toboolean)(l, idx)
 }
 
+/// # Safety
+/// - `l` must be a valid pointer to a `lua_State`.
+/// - The global `API` VTable must have been initialized via `init_api`.
 #[inline(always)]
 pub unsafe fn lua_topointer(l: *mut lua_State, idx: c_int) -> *const std::ffi::c_void {
     ((*API).lua_topointer)(l, idx)
 }
 
+/// # Safety
+/// - `l` must be a valid pointer to a `lua_State`.
+/// - The global `API` VTable must have been initialized via `init_api`.
 #[inline(always)]
 pub unsafe fn lua_pop(l: *mut lua_State, n: c_int) {
     lua_settop(l, -(n) - 1)
 }
 
+/// # Safety
+/// - `l` must be a valid pointer to a `lua_State`.
+/// - The global `API` VTable must have been initialized via `init_api`.
 #[inline(always)]
 pub unsafe fn lua_isnumber(l: *mut lua_State, idx: c_int) -> c_int {
-    if lua_type(l, idx) == LUA_TNUMBER { 1 } else { 0 }
+    if lua_type(l, idx) == LUA_TNUMBER {
+        1
+    } else {
+        0
+    }
 }
 
+/// # Safety
+/// - `l` must be a valid pointer to a `lua_State`.
+/// - The global `API` VTable must have been initialized via `init_api`.
 #[inline(always)]
 pub unsafe fn lua_isstring(l: *mut lua_State, idx: c_int) -> c_int {
-    if lua_type(l, idx) == LUA_TSTRING { 1 } else { 0 }
+    if lua_type(l, idx) == LUA_TSTRING {
+        1
+    } else {
+        0
+    }
 }
 
+/// # Safety
+/// - `l` must be a valid pointer to a `lua_State`.
+/// - The global `API` VTable must have been initialized via `init_api`.
 #[inline(always)]
 pub unsafe fn lua_istable(l: *mut lua_State, idx: c_int) -> c_int {
-    if lua_type(l, idx) == LUA_TTABLE { 1 } else { 0 }
+    if lua_type(l, idx) == LUA_TTABLE {
+        1
+    } else {
+        0
+    }
 }
 
+/// # Safety
+/// - `l` must be a valid pointer to a `lua_State`.
+/// - The global `API` VTable must have been initialized via `init_api`.
 #[inline(always)]
 pub unsafe fn lua_isfunction(l: *mut lua_State, idx: c_int) -> c_int {
-    if lua_type(l, idx) == LUA_TFUNCTION { 1 } else { 0 }
+    if lua_type(l, idx) == LUA_TFUNCTION {
+        1
+    } else {
+        0
+    }
 }
 
+/// # Safety
+/// - `l` must be a valid pointer to a `lua_State`.
+/// - The global `API` VTable must have been initialized via `init_api`.
 #[inline(always)]
 pub unsafe fn lua_isnil(l: *mut lua_State, idx: c_int) -> c_int {
-    if lua_type(l, idx) == LUA_TNIL { 1 } else { 0 }
+    if lua_type(l, idx) == LUA_TNIL {
+        1
+    } else {
+        0
+    }
 }
 
+/// # Safety
+/// - `l` must be a valid pointer to a `lua_State`.
+/// - The global `API` VTable must have been initialized via `init_api`.
 #[inline(always)]
 pub unsafe fn lua_tonumber(l: *mut lua_State, idx: c_int) -> f64 {
     lua_tonumberx(l, idx, std::ptr::null_mut())
 }
 
+/// # Safety
+/// - `l` must be a valid pointer to a `lua_State`.
+/// - The global `API` VTable must have been initialized via `init_api`.
 #[inline(always)]
 pub unsafe fn lua_tointeger(l: *mut lua_State, idx: c_int) -> i64 {
     lua_tointegerx(l, idx, std::ptr::null_mut())
