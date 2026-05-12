@@ -7,8 +7,10 @@ members = [
     "luks-std/std-template",
     "luks-std/Json",
     "luks-std/Http",
-    "luks-std/WebSocket"
-, "crates/luks-module-sys"]
+    "luks-std/WebSocket",
+    "luks-std/ZLib",
+    "crates/luks-module-sys"
+]
 resolver = "2"
 
 [workspace.package]
