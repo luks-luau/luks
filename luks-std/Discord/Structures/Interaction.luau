@@ -35,22 +35,52 @@ export type Interaction = {
     _replied: boolean,
     _deferred: boolean,
 
-    --[[ Sends the initial callback response to this interaction. ]]
+    --[[
+        Sends the initial callback response payload acknowledging this interaction.
+        @param self The interaction instance
+        @param contentOrOptions String text content or compiled response options block
+        @return True if transmitted without network faults
+    ]]
     reply: (self: Interaction, contentOrOptions: any) -> boolean,
     
-    --[[ Defers the response, displaying a thinking state to the user. ]]
+    --[[
+        Defers the callback response, rendering a persistent thinking indicator to the target user.
+        @param self The interaction instance
+        @param ephemeral Renders thinking state visible solely to the execution caller
+        @return True if the frame packet executes without socket errors
+    ]]
     deferReply: (self: Interaction, ephemeral: boolean?) -> boolean,
     
-    --[[ Edits the initial reply previously sent. ]]
+    --[[
+        Edits the initial callback response message payload dispatched previously.
+        @param self The interaction instance
+        @param contentOrOptions Replacement string payload or configuration block maps
+        @return Success condition alongside modified message maps or error strings
+    ]]
     editReply: (self: Interaction, contentOrOptions: any) -> (boolean, any),
     
-    --[[ Sends a followup message associated with this interaction's webhook token. ]]
+    --[[
+        Dispatches an individual auxiliary follow-up message using the interaction webhook token.
+        @param self The interaction instance
+        @param contentOrOptions Message body content string or rich dictionary maps
+        @return Success condition alongside compiled payload table mapping outputs
+    ]]
     followUp: (self: Interaction, contentOrOptions: any) -> (boolean, any),
 
-    --[[ Displays a pop-up input form (Modal) dialog to the user. ]]
+    --[[
+        Displays an interactive modal pop-up dialogue form directly on the user interface screen.
+        @param self The interaction instance
+        @param modalBuilder Constructed modal configuration table envelope
+        @return True if the dialog packet executes successfully
+    ]]
     showModal: (self: Interaction, modalBuilder: any) -> boolean,
     
-    --[[ Retrieves the text value submitted for a given component custom ID within a ModalSubmit interaction. ]]
+    --[[
+        Retrieves the decoded text entry value matching a target component identifier from submitted modal structures.
+        @param self The interaction instance
+        @param customId Component extraction key query matching form inputs
+        @return Parsed character input string if matched successfully
+    ]]
     getTextInputValue: (self: Interaction, customId: string) -> string?,
 }
 
@@ -59,7 +89,10 @@ local InteractionMT = {}
 InteractionMT.__index = InteractionMT
 
 --[[
-    Instantiates a new Interaction wrapper object.
+    Instantiates a new Interaction wrapper object framework schema.
+    @param payload Raw incoming event payload dictionary
+    @param restClient Authorized Rest client reference engine
+    @return A new Interaction wrapper instance
 ]]
 function Interaction.new(payload: { [string]: any }, restClient: any): Interaction
     local rawUser = payload.user or (payload.member and payload.member.user) or {}
@@ -129,6 +162,11 @@ local function buildInteractionData(contentOrOptions: any): { [string]: any }
     return data
 end
 
+--[[
+    Sends the initial callback response payload acknowledging this interaction.
+    @param contentOrOptions String text content or compiled response options block
+    @return True if transmitted without network faults
+]]
 function InteractionMT:reply(contentOrOptions: any): boolean
     if not self._rest or self._replied then return false end
     
@@ -145,6 +183,11 @@ function InteractionMT:reply(contentOrOptions: any): boolean
     return ok
 end
 
+--[[
+    Defers the callback response, rendering a persistent thinking indicator to the target user.
+    @param ephemeral Renders thinking state visible solely to the execution caller
+    @return True if the frame packet executes without socket errors
+]]
 function InteractionMT:deferReply(ephemeral: boolean?): boolean
     if not self._rest or self._replied or self._deferred then return false end
     
@@ -161,6 +204,11 @@ function InteractionMT:deferReply(ephemeral: boolean?): boolean
     return ok
 end
 
+--[[
+    Edits the initial callback response message payload dispatched previously.
+    @param contentOrOptions Replacement string payload or configuration block maps
+    @return Success condition alongside modified message maps or error strings
+]]
 function InteractionMT:editReply(contentOrOptions: any): (boolean, any)
     if not self._rest then return false, nil end
     
@@ -168,6 +216,11 @@ function InteractionMT:editReply(contentOrOptions: any): (boolean, any)
     return self._rest:patch("/webhooks/" .. self.application_id .. "/" .. self.token .. "/messages/@original", payload)
 end
 
+--[[
+    Dispatches an individual auxiliary follow-up message using the interaction webhook token.
+    @param contentOrOptions Message body content string or rich dictionary maps
+    @return Success condition alongside compiled payload table mapping outputs
+]]
 function InteractionMT:followUp(contentOrOptions: any): (boolean, any)
     if not self._rest then return false, nil end
     
@@ -175,6 +228,11 @@ function InteractionMT:followUp(contentOrOptions: any): (boolean, any)
     return self._rest:post("/webhooks/" .. self.application_id .. "/" .. self.token, payload)
 end
 
+--[[
+    Displays an interactive modal pop-up dialogue form directly on the user interface screen.
+    @param modalBuilder Constructed modal configuration table envelope
+    @return True if the dialog packet executes successfully
+]]
 function InteractionMT:showModal(modalBuilder: any): boolean
     if not self._rest or self._replied then return false end
     
@@ -197,6 +255,11 @@ function InteractionMT:showModal(modalBuilder: any): boolean
     return ok
 end
 
+--[[
+    Retrieves the decoded text entry value matching a target component identifier from submitted modal structures.
+    @param customId Component extraction key query matching form inputs
+    @return Parsed character input string if matched successfully
+]]
 function InteractionMT:getTextInputValue(customId: string): string?
     if self.type ~= 5 or not self.data or not self.data.components then
         return nil

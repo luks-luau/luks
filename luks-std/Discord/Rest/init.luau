@@ -10,16 +10,65 @@ local Json = require("../Json")
 local Data = require("Data")
 
 export type RestClient = {
-    _client: any, -- Referência fraca/abstrata à instância de Client principal
+    -- Weak application client host reference
+    _client: any,
     
-    --[[ Executa uma requisição HTTP customizada. ]]
+    --[[
+        Executes a signed customized HTTP request against target API destinations.
+        @param self The rest client instance
+        @param method The uppercase HTTP method (GET, POST, PATCH, DELETE, PUT)
+        @param path The absolute URL or relative Discord API path route
+        @param options Optional parameter block holding request body payloads and header mappings
+        @return Success status boolean alongside decoded response tables or failure descriptions
+    ]]
     request: (self: RestClient, method: string, path: string, options: { body: any?, headers: { [string]: string }? }?) -> (boolean, any),
     
-    --[[ Helpers de atalho para métodos HTTP padronizados ]]
+    --[[
+        Executes a standard HTTP GET request against the destination endpoint.
+        @param self The rest client instance
+        @param path Relative or absolute endpoint routing path
+        @param headers Optional explicit table of additional request headers
+        @return Success condition boolean alongside decoded payload contents
+    ]]
     get: (self: RestClient, path: string, headers: { [string]: string }?) -> (boolean, any),
+    
+    --[[
+        Executes a standard HTTP POST request submitting data payloads.
+        @param self The rest client instance
+        @param path Relative or absolute endpoint routing path
+        @param body Data content string or table structure to encode
+        @param headers Optional explicit table of additional request headers
+        @return Success condition boolean alongside decoded payload contents
+    ]]
     post: (self: RestClient, path: string, body: any?, headers: { [string]: string }?) -> (boolean, any),
+    
+    --[[
+        Executes a standard HTTP PATCH request updating remote resources.
+        @param self The rest client instance
+        @param path Relative or absolute endpoint routing path
+        @param body Data content string or table structure to encode
+        @param headers Optional explicit table of additional request headers
+        @return Success condition boolean alongside decoded payload contents
+    ]]
     patch: (self: RestClient, path: string, body: any?, headers: { [string]: string }?) -> (boolean, any),
+    
+    --[[
+        Executes a standard HTTP DELETE request targeting a remote resource.
+        @param self The rest client instance
+        @param path Relative or absolute endpoint routing path
+        @param headers Optional explicit table of additional request headers
+        @return Success condition boolean alongside decoded payload contents
+    ]]
     delete: (self: RestClient, path: string, headers: { [string]: string }?) -> (boolean, any),
+    
+    --[[
+        Executes a standard HTTP PUT request overwriting destination configurations.
+        @param self The rest client instance
+        @param path Relative or absolute endpoint routing path
+        @param body Data content string or table structure to encode
+        @param headers Optional explicit table of additional request headers
+        @return Success condition boolean alongside decoded payload contents
+    ]]
     put: (self: RestClient, path: string, body: any?, headers: { [string]: string }?) -> (boolean, any),
 }
 
@@ -28,8 +77,9 @@ local RestMT = {}
 RestMT.__index = RestMT
 
 --[[
-    Inicializa uma nova interface Rest vinculada ao token do Client.
-    @param client Instância base de Client contendo a propriedade `.token`.
+    Initializes a new Rest interface layer tied to the primary Client scope.
+    @param client Base client framework object containing authorized credentials
+    @return A new RestClient interface instance
 ]]
 function Rest.new(client: any): RestClient
     local self = {
@@ -40,19 +90,20 @@ function Rest.new(client: any): RestClient
 end
 
 --[[
-    Dispara uma requisição HTTP assinada contra a API do Discord.
-    @param method Método HTTP (GET, POST, PATCH, DELETE, PUT).
-    @param path Caminho do endpoint relativo (ex: "/channels/123/messages") ou absoluto.
-    @param options Opções opcionais contendo corpo (tabela ou string) e headers extras.
-    @return (sucesso, dadosDecodificadosOuErro)
+    Executes a signed customized HTTP request against target API destinations.
+    @param self The rest client instance
+    @param method The uppercase HTTP method (GET, POST, PATCH, DELETE, PUT)
+    @param path The absolute URL or relative Discord API path route
+    @param options Optional parameter block holding request body payloads and header mappings
+    @return Success status boolean alongside decoded response tables or failure descriptions
 ]]
 function RestMT:request(method: string, path: string, options: { body: any?, headers: { [string]: string }? }?): (boolean, any)
     local token = self._client and self._client.token
     if not token then
-        return false, "Nenhum token configurado no Client para autorização HTTP."
+        return false, "No authentication token configured on Client for HTTP authorization."
     end
 
-    -- Resolução inteligente do URL base
+    -- Intelligent base URL resolution
     local url = path
     if not string.find(url, "^https?://") then
         url = Data.Constants.BaseUrl .. (string.sub(path, 1, 1) == "/" and "" or "/") .. path
@@ -73,10 +124,10 @@ function RestMT:request(method: string, path: string, options: { body: any?, hea
     local reqBody: string? = nil
     if opts.body ~= nil then
         if type(opts.body) == "table" then
-            -- Serialização automática de tabelas para JSON
+            -- Automatic serialization of tables to JSON
             local ok, encoded = pcall(Json.encode, opts.body)
             if not ok then
-                return false, "Falha ao serializar corpo da requisição para JSON: " .. tostring(encoded)
+                return false, "Failed to serialize request body to JSON: " .. tostring(encoded)
             end
             reqBody = encoded
             reqHeaders["Content-Type"] = "application/json"
@@ -90,7 +141,7 @@ function RestMT:request(method: string, path: string, options: { body: any?, hea
         end
     end
 
-    -- Execução assíncrona robusta na thread do runtime com pcall
+    -- Robust execution on the runtime thread via pcall
     local ok, res = pcall(function()
         local httpMethod = string.upper(method)
         if httpMethod == "GET" then
@@ -98,15 +149,14 @@ function RestMT:request(method: string, path: string, options: { body: any?, hea
         elseif httpMethod == "POST" then
             return Http.post(url, { headers = reqHeaders, body = reqBody or "" })
         elseif httpMethod == "DELETE" then
-            -- O Http nativo aceita o mapa de headers diretamente no delete
+            -- Native Http accepts the headers map directly on delete
             return Http.delete(url, reqHeaders)
         elseif httpMethod == "PATCH" then
-            -- Caso o método nativo patch não exista separadamente, podemos mapear ou usar post/custom
-            -- O módulo Http padrão possui get, post, delete. Vamos checar se possui patch/put:
+            -- Fallback mapping if native patch method is unavailable
             if (Http :: any).patch then
                 return (Http :: any).patch(url, { headers = reqHeaders, body = reqBody or "" })
             else
-                -- Mapeia via POST customizado caso a engine nativa restrinja verbos extras
+                -- Override method via POST if native engine restricts additional verbs
                 reqHeaders["X-HTTP-Method-Override"] = "PATCH"
                 return Http.post(url, { headers = reqHeaders, body = reqBody or "" })
             end
@@ -123,26 +173,26 @@ function RestMT:request(method: string, path: string, options: { body: any?, hea
     end)
 
     if not ok or not res then
-        return false, "Falha de socket I/O HTTP ao comunicar com a API REST: " .. tostring(res)
+        return false, "HTTP socket I/O failure while communicating with REST API: " .. tostring(res)
     end
 
-    -- Se o status for de sucesso (2xx)
+    -- Successful status response (2xx)
     if res.status and res.status >= 200 and res.status < 300 then
         if not res.body or res.body == "" then
             return true, {}
         end
         
-        -- Tenta decodificar o JSON automaticamente
+        -- Attempt automatic JSON decoding
         local decOk, decoded = pcall(Json.decode, res.body)
         if decOk and decoded then
             return true, decoded
         else
-            -- Retorna a string pura caso o endpoint devolva texto puro em vez de JSON
+            -- Return raw text body if endpoint serves plaintext instead of JSON
             return true, res.body
         end
     else
-        -- Tenta extrair a mensagem de erro da API do Discord
-        local errMsg = "Erro HTTP " .. tostring(res.status)
+        -- Attempt extracting error message payload from Discord API
+        local errMsg = "HTTP Error " .. tostring(res.status)
         if res.body and res.body ~= "" then
             local decOk, decoded = pcall(Json.decode, res.body)
             if decOk and decoded and decoded.message then
@@ -155,22 +205,55 @@ function RestMT:request(method: string, path: string, options: { body: any?, hea
     end
 end
 
+--[[
+    Executes a standard HTTP GET request against the destination endpoint.
+    @param path Relative or absolute endpoint routing path
+    @param headers Optional explicit table of additional request headers
+    @return Success condition boolean alongside decoded payload contents
+]]
 function RestMT:get(path: string, headers: { [string]: string }?): (boolean, any)
     return self:request("GET", path, { headers = headers })
 end
 
+--[[
+    Executes a standard HTTP POST request submitting data payloads.
+    @param path Relative or absolute endpoint routing path
+    @param body Data content string or table structure to encode
+    @param headers Optional explicit table of additional request headers
+    @return Success condition boolean alongside decoded payload contents
+]]
 function RestMT:post(path: string, body: any?, headers: { [string]: string }?): (boolean, any)
     return self:request("POST", path, { body = body, headers = headers })
 end
 
+--[[
+    Executes a standard HTTP PATCH request updating remote resources.
+    @param path Relative or absolute endpoint routing path
+    @param body Data content string or table structure to encode
+    @param headers Optional explicit table of additional request headers
+    @return Success condition boolean alongside decoded payload contents
+]]
 function RestMT:patch(path: string, body: any?, headers: { [string]: string }?): (boolean, any)
     return self:request("PATCH", path, { body = body, headers = headers })
 end
 
+--[[
+    Executes a standard HTTP DELETE request targeting a remote resource.
+    @param path Relative or absolute endpoint routing path
+    @param headers Optional explicit table of additional request headers
+    @return Success condition boolean alongside decoded payload contents
+]]
 function RestMT:delete(path: string, headers: { [string]: string }?): (boolean, any)
     return self:request("DELETE", path, { headers = headers })
 end
 
+--[[
+    Executes a standard HTTP PUT request overwriting destination configurations.
+    @param path Relative or absolute endpoint routing path
+    @param body Data content string or table structure to encode
+    @param headers Optional explicit table of additional request headers
+    @return Success condition boolean alongside decoded payload contents
+]]
 function RestMT:put(path: string, body: any?, headers: { [string]: string }?): (boolean, any)
     return self:request("PUT", path, { body = body, headers = headers })
 end

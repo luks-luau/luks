@@ -23,10 +23,41 @@ export type GatewayManager = {
     _activeSignals: { any },
     _running: boolean,
 
+    --[[
+        Initiates the persistent WebSocket gateway connection and event loop polling.
+        @param self The gateway manager instance
+    ]]
     connect: (self: GatewayManager) -> (),
+    
+    --[[
+        Terminates the gateway streaming channel cleanly and halts reconnection loops.
+        @param self The gateway manager instance
+    ]]
     disconnect: (self: GatewayManager) -> (),
+    
+    --[[
+        Transmits real-time status and activity updates to the upstream server stream.
+        @param self The gateway manager instance
+        @param presence Encoded table payload representing current activity status
+        @return True if transmitted successfully across active socket stream
+    ]]
     sendPresence: (self: GatewayManager, presence: { [string]: any }) -> boolean,
+    
+    --[[
+        Directs the gateway layer to update internal voice state presence metrics.
+        @param self The gateway manager instance
+        @param guildId Target guild identifier hosting the destination audio channel
+        @param channelId Voice channel ID to join, or nil to leave
+        @param selfMute Enforces a locally muted state
+        @param selfDeaf Enforces a locally deafened state
+        @return True if the frame payload was correctly sent
+    ]]
     sendVoiceStateUpdate: (self: GatewayManager, guildId: string, channelId: string?, selfMute: boolean?, selfDeaf: boolean?) -> boolean,
+    
+    --[[
+        Internal resource cleanup logic that disposes of leftover event handlers.
+        @param self The gateway manager instance
+    ]]
     _cleanup: (self: GatewayManager) -> (),
 }
 
@@ -34,6 +65,11 @@ local Gateway = {}
 local GatewayMT = {}
 GatewayMT.__index = GatewayMT
 
+--[[
+    Instantiates a stateful GatewayManager layer binding directly to client loops.
+    @param client Abstract application host instance reference
+    @return A new GatewayManager object wrapper
+]]
 function Gateway.new(client: any): GatewayManager
     local self = {
         _client = client,
@@ -47,6 +83,10 @@ function Gateway.new(client: any): GatewayManager
     return (self :: any) :: GatewayManager
 end
 
+--[[
+    Internal resource cleanup logic that disposes of leftover event handlers.
+    @param self The gateway manager instance
+]]
 function GatewayMT:_cleanup()
     for _, sig in ipairs(self._activeSignals) do
         pcall(function() sig:Disconnect() end)
@@ -61,6 +101,10 @@ function GatewayMT:_cleanup()
     self._connected = false
 end
 
+--[[
+    Terminates the gateway streaming channel cleanly and halts reconnection loops.
+    @param self The gateway manager instance
+]]
 function GatewayMT:disconnect()
     self._running = false
     self:_cleanup()
@@ -69,6 +113,12 @@ function GatewayMT:disconnect()
     end
 end
 
+--[[
+    Transmits real-time status and activity updates to the upstream server stream.
+    @param self The gateway manager instance
+    @param presence Encoded table payload representing current activity status
+    @return True if transmitted successfully across active socket stream
+]]
 function GatewayMT:sendPresence(presence: { [string]: any }): boolean
     if not self._connected or not self._conn then return false end
     local payload = {
@@ -81,6 +131,15 @@ function GatewayMT:sendPresence(presence: { [string]: any }): boolean
     return ok
 end
 
+--[[
+    Directs the gateway layer to update internal voice state presence metrics.
+    @param self The gateway manager instance
+    @param guildId Target guild identifier hosting the destination audio channel
+    @param channelId Voice channel ID to join, or nil to leave
+    @param selfMute Enforces a locally muted state
+    @param selfDeaf Enforces a locally deafened state
+    @return True if the frame payload was correctly sent
+]]
 function GatewayMT:sendVoiceStateUpdate(guildId: string, channelId: string?, selfMute: boolean?, selfDeaf: boolean?): boolean
     if not self._connected or not self._conn then return false end
     local payload = {
@@ -98,6 +157,10 @@ function GatewayMT:sendVoiceStateUpdate(guildId: string, channelId: string?, sel
     return ok
 end
 
+--[[
+    Initiates the persistent WebSocket gateway connection and event loop polling.
+    @param self The gateway manager instance
+]]
 function GatewayMT:connect()
     if self._running then return end
     self._running = true
@@ -173,7 +236,7 @@ function GatewayMT:connect()
                                         end
                                     end)
                                     if not hbOk then break end
-                                end
+                                 end
                             end
                         end)
                     end

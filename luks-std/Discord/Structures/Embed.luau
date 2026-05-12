@@ -1,25 +1,102 @@
 --!strict
 
 --[[
-    Embed Builder — Padronização Enterprise Fluente para construção de Rich Embeds.
+    Embed Builder — Fluent Enterprise standardization layout for composing rich message Embeds.
 ]]
 
 export type Embed = {
     _data: { [string]: any },
 
-    -- Setters encadeáveis que retornam a própria instância (self)
+    --[[
+        Sets the top prominent bold title overlay string.
+        @param self The embed builder instance
+        @param title Primary card layout title string
+        @return The chainable embed builder instance
+    ]]
     setTitle: (self: Embed, title: string) -> Embed,
+    
+    --[[
+        Sets the main descriptive text block content.
+        @param self The embed builder instance
+        @param description Primary multiline paragraph message contents
+        @return The chainable embed builder instance
+    ]]
     setDescription: (self: Embed, description: string) -> Embed,
+    
+    --[[
+        Sets the primary hyperlink redirection web address mapped to the title overlay.
+        @param self The embed builder instance
+        @param url Destination web page URL
+        @return The chainable embed builder instance
+    ]]
     setUrl: (self: Embed, url: string) -> Embed,
+    
+    --[[
+        Sets the accent strip side indicator display color.
+        @param self The embed builder instance
+        @param color Hexadecimal string, raw decimal integer, or RGB color structure map
+        @return The chainable embed builder instance
+    ]]
     setColor: (self: Embed, color: any) -> Embed,
+    
+    --[[
+        Appends a footer timestamp metric indication.
+        @param self The embed builder instance
+        @param timestamp Optional ISO-8601 formatted metric date string
+        @return The chainable embed builder instance
+    ]]
     setTimestamp: (self: Embed, timestamp: string?) -> Embed,
+    
+    --[[
+        Sets the small bottom trailing footer note overlay line.
+        @param self The embed builder instance
+        @param text Footer baseline message string
+        @param iconUrl Optional accompanying trailing badge avatar URL
+        @return The chainable embed builder instance
+    ]]
     setFooter: (self: Embed, text: string, iconUrl: string?) -> Embed,
+    
+    --[[
+        Embeds a large visual image graphic inside the content card body.
+        @param self The embed builder instance
+        @param url Direct source image web URL
+        @return The chainable embed builder instance
+    ]]
     setImage: (self: Embed, url: string) -> Embed,
+    
+    --[[
+        Embeds a smaller visual thumbnail corner accent badge graphic.
+        @param self The embed builder instance
+        @param url Thumbnail graphic web URL
+        @return The chainable embed builder instance
+    ]]
     setThumbnail: (self: Embed, url: string) -> Embed,
+    
+    --[[
+        Sets the upper leading author credit signature line.
+        @param self The embed builder instance
+        @param name Author display name signature
+        @param url Optional hyperlinked signature redirection destination
+        @param iconUrl Optional accompanying leading thumbnail badge URL
+        @return The chainable embed builder instance
+    ]]
     setAuthor: (self: Embed, name: string, url: string?, iconUrl: string?) -> Embed,
+    
+    --[[
+        Appends an individual structured header/value display block field.
+        @param self The embed builder instance
+        @param name Distinct field sub-heading label
+        @param value Field descriptive body text
+        @param inline Positions field side-by-side horizontally if width permits
+        @return The chainable embed builder instance
+    ]]
     addField: (self: Embed, name: string, value: string, inline: boolean?) -> Embed,
     
-    -- Finaliza o objeto para exportação em JSON
+    --[[
+        Finalizes the structure object for JSON output export.
+        @param self The embed builder instance
+        @return Clean dictionary payload target table map
+    ]]
     toJSON: (self: Embed) -> { [string]: any },
 }
 
@@ -27,7 +104,10 @@ local Embed = {}
 local EmbedMT = {}
 EmbedMT.__index = EmbedMT
 
---[[ Cria uma nova instância de Embed em branco. ]]
+--[[
+    Instantiates a pristine blank Embed builder object wrapper.
+    @return A new Embed instance
+]]
 function Embed.new(): Embed
     local self = {
         _data = {},
@@ -36,31 +116,51 @@ function Embed.new(): Embed
     return (self :: any) :: Embed
 end
 
+--[[
+    Sets the top prominent bold title overlay string.
+    @param title Primary card layout title string
+    @return The chainable embed builder instance
+]]
 function EmbedMT:setTitle(title: string): Embed
     self._data.title = tostring(title)
     return self
 end
 
+--[[
+    Sets the main descriptive text block content.
+    @param description Primary multiline paragraph message contents
+    @return The chainable embed builder instance
+]]
 function EmbedMT:setDescription(description: string): Embed
     self._data.description = tostring(description)
     return self
 end
 
+--[[
+    Sets the primary hyperlink redirection web address mapped to the title overlay.
+    @param url Destination web page URL
+    @return The chainable embed builder instance
+]]
 function EmbedMT:setUrl(url: string): Embed
     self._data.url = tostring(url)
     return self
 end
 
+--[[
+    Sets the accent strip side indicator display color.
+    @param color Hexadecimal string, raw decimal integer, or RGB color structure map
+    @return The chainable embed builder instance
+]]
 function EmbedMT:setColor(color: any): Embed
     local numColor = 0
     if type(color) == "number" then
         numColor = color
     elseif type(color) == "string" then
-        -- Suporte flexível para hexadecimais puros (#ff0000 ou ff0000)
+        -- Flexible validation parsing hexadecimal strings (#ff0000 or ff0000)
         local cleaned = string.gsub(color, "^#", "")
         numColor = tonumber(cleaned, 16) or 0
     elseif type(color) == "table" and color.r and color.g and color.b then
-        -- Suporte para tabela RGB
+        -- Support passing explicit RGB integer structures
         numColor = bit32.bor(
             bit32.lshift(bit32.band(color.r, 255), 16),
             bit32.lshift(bit32.band(color.g, 255), 8),
@@ -71,12 +171,23 @@ function EmbedMT:setColor(color: any): Embed
     return self
 end
 
+--[[
+    Appends a footer timestamp metric indication.
+    @param timestamp Optional ISO-8601 formatted metric date string
+    @return The chainable embed builder instance
+]]
 function EmbedMT:setTimestamp(timestamp: string?): Embed
-    -- Usa uma representação de string ISO ou gera dinamicamente se a engine suportar
+    -- Fallback preset ISO format string timestamp representation
     self._data.timestamp = timestamp or "2026-05-12T12:00:00.000Z"
     return self
 end
 
+--[[
+    Sets the small bottom trailing footer note overlay line.
+    @param text Footer baseline message string
+    @param iconUrl Optional accompanying trailing badge avatar URL
+    @return The chainable embed builder instance
+]]
 function EmbedMT:setFooter(text: string, iconUrl: string?): Embed
     self._data.footer = {
         text = tostring(text),
@@ -85,6 +196,11 @@ function EmbedMT:setFooter(text: string, iconUrl: string?): Embed
     return self
 end
 
+--[[
+    Embeds a large visual image graphic inside the content card body.
+    @param url Direct source image web URL
+    @return The chainable embed builder instance
+]]
 function EmbedMT:setImage(url: string): Embed
     self._data.image = {
         url = tostring(url),
@@ -92,6 +208,11 @@ function EmbedMT:setImage(url: string): Embed
     return self
 end
 
+--[[
+    Embeds a smaller visual thumbnail corner accent badge graphic.
+    @param url Thumbnail graphic web URL
+    @return The chainable embed builder instance
+]]
 function EmbedMT:setThumbnail(url: string): Embed
     self._data.thumbnail = {
         url = tostring(url),
@@ -99,6 +220,13 @@ function EmbedMT:setThumbnail(url: string): Embed
     return self
 end
 
+--[[
+    Sets the upper leading author credit signature line.
+    @param name Author display name signature
+    @param url Optional hyperlinked signature redirection destination
+    @param iconUrl Optional accompanying leading thumbnail badge URL
+    @return The chainable embed builder instance
+]]
 function EmbedMT:setAuthor(name: string, url: string?, iconUrl: string?): Embed
     self._data.author = {
         name = tostring(name),
@@ -108,6 +236,13 @@ function EmbedMT:setAuthor(name: string, url: string?, iconUrl: string?): Embed
     return self
 end
 
+--[[
+    Appends an individual structured header/value display block field.
+    @param name Distinct field sub-heading label
+    @param value Field descriptive body text
+    @param inline Positions field side-by-side horizontally if width permits
+    @return The chainable embed builder instance
+]]
 function EmbedMT:addField(name: string, value: string, inline: boolean?): Embed
     if not self._data.fields then
         self._data.fields = {}
@@ -120,8 +255,12 @@ function EmbedMT:addField(name: string, value: string, inline: boolean?): Embed
     return self
 end
 
+--[[
+    Finalizes the structure object for JSON output export.
+    @return Clean dictionary payload target table map
+]]
 function EmbedMT:toJSON(): { [string]: any }
-    -- Retorna uma cópia limpa pronta para o payload REST
+    -- Return clean shallow map dictionary for REST execution
     local result = {}
     for k, v in pairs(self._data) do
         result[k] = v

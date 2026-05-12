@@ -1,7 +1,7 @@
 --!strict
 
 --[[
-    Channel Structure — POO Wrapper for Discord text/voice channels.
+    Channel Structure — OOP Wrapper modeling Discord text, voice, and category channels.
 ]]
 
 export type Channel = {
@@ -11,7 +11,12 @@ export type Channel = {
     guild_id: string?,
     _rest: any,
 
-    --[[ Envia uma mensagem neste canal contendo texto, Embeds ou Componentes visuais. ]]
+    --[[
+        Dispatches a message payload into this channel containing raw text, embedded cards, or interactive UI components.
+        @param self The channel instance
+        @param optionsOrContent Text string content or structured parameter block payload
+        @return Success condition alongside the compiled response message table or execution error
+    ]]
     send: (self: Channel, optionsOrContent: any) -> (boolean, any),
 }
 
@@ -19,6 +24,12 @@ local Channel = {}
 local ChannelMT = {}
 ChannelMT.__index = ChannelMT
 
+--[[
+    Instantiates a structured Channel wrapper mapping to underlying API entities.
+    @param data Raw JSON attributes modeling the target channel
+    @param restClient Authorized Rest API client interface reference
+    @return A new Channel instance wrapper
+]]
 function Channel.new(data: { [string]: any }, restClient: any): Channel
     local self = {
         id = tostring(data.id or ""),
@@ -31,9 +42,14 @@ function Channel.new(data: { [string]: any }, restClient: any): Channel
     return (self :: any) :: Channel
 end
 
+--[[
+    Dispatches a message payload into this channel containing raw text, embedded cards, or interactive UI components.
+    @param optionsOrContent Text string content or structured parameter block payload
+    @return Success condition alongside the compiled response message table or execution error
+]]
 function ChannelMT:send(optionsOrContent: any): (boolean, any)
     if not self._rest then
-        return false, "Cliente REST ausente no objeto Channel."
+        return false, "REST client interface missing on Channel object."
     end
 
     local payload = {}

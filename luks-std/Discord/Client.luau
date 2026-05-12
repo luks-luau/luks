@@ -62,22 +62,53 @@ export type DiscordClient = {
     --[[ Dispatched upon unrecoverable protocol execution errors. ]]
     onError: Signal.Signal<string>,
 
-    --[[ Authenticates and connects the client to the Discord API ecosystem. ]]
+    --[[
+        Authenticates and connects the client to the Discord API ecosystem.
+        @param self The client instance
+        @param token Optional authentication token to override the configured token
+    ]]
     login: (self: DiscordClient, token: string?) -> (),
     
-    --[[ Disconnects active socket streams and terminates polling intervals. ]]
+    --[[
+        Disconnects active socket streams and terminates polling intervals.
+        @param self The client instance
+    ]]
     close: (self: DiscordClient) -> (),
     
-    --[[ Instantiates a channel entity interface mapped to a unique destination ID. ]]
+    --[[
+        Instantiates a channel entity interface mapped to a unique destination ID.
+        @param self The client instance
+        @param id The unique identifier of the target channel
+        @return A new Channel instance interface
+    ]]
     getChannel: (self: DiscordClient, id: string) -> Channel.Channel,
     
-    --[[ Broadcasts real-time status presence updates to the gateway stream. ]]
+    --[[
+        Broadcasts real-time status presence updates to the gateway stream.
+        @param self The client instance
+        @param presence Table containing status, activities, afk flag, and idle timestamp
+        @return True if successfully enqueued or sent to the gateway stream
+    ]]
     setStatus: (self: DiscordClient, presence: { status: string?, activities: { any }?, afk: boolean?, since: number? }) -> boolean,
     
-    --[[ Overwrites or synchronizes global/guild Application Slash Commands against Discord REST registries. ]]
+    --[[
+        Overwrites or synchronizes global/guild Application Slash Commands against Discord REST registries.
+        @param self The client instance
+        @param commands Array of structured application commands to register
+        @param guildId Optional target guild ID to register local commands instead of global ones
+        @return Success status and the resulting JSON payload response or error message
+    ]]
     registerCommands: (self: DiscordClient, commands: { any }, guildId: string?) -> (boolean, any),
 
-    --[[ Directs the gateway layer to join, migrate, or leave a designated audio channel. ]]
+    --[[
+        Directs the gateway layer to join, migrate, or leave a designated audio channel.
+        @param self The client instance
+        @param guildId The guild identifier hosting the target voice channel
+        @param channelId Optional voice channel ID to join, or nil to disconnect
+        @param mute Whether the bot should join self-muted
+        @param deaf Whether the bot should join self-deafened
+        @return True if the voice state update payload was successfully sent
+    ]]
     joinVoiceChannel: (self: DiscordClient, guildId: string, channelId: string?, mute: boolean?, deaf: boolean?) -> boolean,
 }
 
@@ -87,6 +118,8 @@ ClientMT.__index = ClientMT
 
 --[[
     Instantiates a fresh DiscordClient application host.
+    @param options Optional client options containing token, intents, and application ID
+    @return A new DiscordClient instance
 ]]
 function Client.new(options: { token: string?, intents: number?, application_id: string? }?): DiscordClient
     local opts = options or {}
@@ -141,6 +174,11 @@ function Client.new(options: { token: string?, intents: number?, application_id:
     return (self :: any) :: DiscordClient
 end
 
+--[[
+    Authenticates and connects the client to the Discord API ecosystem.
+    @param self The client instance
+    @param token Optional authentication token to override the configured token
+]]
 function ClientMT:login(token: string?)
     if token then
         self.token = token
@@ -154,15 +192,31 @@ function ClientMT:login(token: string?)
     self.gateway:connect()
 end
 
+--[[
+    Disconnects active socket streams and terminates polling intervals.
+    @param self The client instance
+]]
 function ClientMT:close()
     print("[Discord.Client] Disconnecting and tearing down the bot execution context...")
     self.gateway:disconnect()
 end
 
+--[[
+    Instantiates a channel entity interface mapped to a unique destination ID.
+    @param self The client instance
+    @param id The unique identifier of the target channel
+    @return A new Channel instance interface
+]]
 function ClientMT:getChannel(id: string): Channel.Channel
     return Channel.new({ id = tostring(id) }, self.rest)
 end
 
+--[[
+    Broadcasts real-time status presence updates to the gateway stream.
+    @param self The client instance
+    @param presence Table containing status, activities, afk flag, and idle timestamp
+    @return True if successfully enqueued or sent to the gateway stream
+]]
 function ClientMT:setStatus(presence: { status: string?, activities: { any }?, afk: boolean?, since: number? }): boolean
     local p = {
         status = presence.status or "online",
@@ -173,6 +227,13 @@ function ClientMT:setStatus(presence: { status: string?, activities: { any }?, a
     return self.gateway:sendPresence(p)
 end
 
+--[[
+    Overwrites or synchronizes global/guild Application Slash Commands against Discord REST registries.
+    @param self The client instance
+    @param commands Array of structured application commands to register
+    @param guildId Optional target guild ID to register local commands instead of global ones
+    @return Success status and the resulting JSON payload response or error message
+]]
 function ClientMT:registerCommands(commands: { any }, guildId: string?): (boolean, any)
     local appId = self.application_id
     if not appId or appId == "" then
@@ -194,6 +255,15 @@ function ClientMT:registerCommands(commands: { any }, guildId: string?): (boolea
     return self.rest:put(endpoint, commands)
 end
 
+--[[
+    Directs the gateway layer to join, migrate, or leave a designated audio channel.
+    @param self The client instance
+    @param guildId The guild identifier hosting the target voice channel
+    @param channelId Optional voice channel ID to join, or nil to disconnect
+    @param mute Whether the bot should join self-muted
+    @param deaf Whether the bot should join self-deafened
+    @return True if the voice state update payload was successfully sent
+]]
 function ClientMT:joinVoiceChannel(guildId: string, channelId: string?, mute: boolean?, deaf: boolean?): boolean
     return self.gateway:sendVoiceStateUpdate(guildId, channelId, mute, deaf)
 end

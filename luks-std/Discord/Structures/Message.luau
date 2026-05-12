@@ -35,19 +35,44 @@ export type Message = {
     
     _rest: any,
 
-    --[[ Replies to this message referencing the original context ID. Returns the successfully created Message object. ]]
+    --[[
+        Dispatches a reply targeting this original message context ID.
+        @param self The message instance
+        @param contentOrOptions String text content or constructed parameter maps
+        @return Success condition alongside the newly created Message object wrapper if successful
+    ]]
     reply: (self: Message, contentOrOptions: any) -> (boolean, Message?),
     
-    --[[ Edits the contents, embedded schemas, or UI components of this message. ]]
+    --[[
+        Edits the text body, embedded cards, or UI layouts appended to this message.
+        @param self The message instance
+        @param newContentOrOptions Updated message content strings or structured tables
+        @return Success condition alongside the updated Message structure wrapper
+    ]]
     edit: (self: Message, newContentOrOptions: any) -> (boolean, Message?),
     
-    --[[ Permanently deletes this message from the channel history. ]]
+    --[[
+        Permanently wipes/deletes this message from channel storage records.
+        @param self The message instance
+        @return True if deletion completes without backend routing faults
+    ]]
     delete: (self: Message) -> boolean,
     
-    --[[ Appends a standard Unicode or customized reaction emoji to this message. ]]
+    --[[
+        Appends an individual Unicode or customized platform reaction emoji to this message.
+        @param self The message instance
+        @param emoji String representation or raw format character code
+        @return True if the reaction packet executes correctly
+    ]]
     react: (self: Message, emoji: string) -> boolean,
 
-    --[[ Spawns a nested discussion forum thread branching off this specific message. ]]
+    --[[
+        Spawns a nested discussion forum sub-thread branching from this message context.
+        @param self The message instance
+        @param name Title heading assigned to the newly spawned thread
+        @param autoArchiveMinutes Inactivity timeout threshold boundary (default 1440)
+        @return Success condition alongside the instantiated ThreadChannel wrapper object
+    ]]
     startThread: (self: Message, name: string, autoArchiveMinutes: number?) -> (boolean, ThreadChannel.ThreadChannel?),
 }
 
@@ -56,7 +81,10 @@ local MessageMT = {}
 MessageMT.__index = MessageMT
 
 --[[
-    Instantiates a structured Message wrapper from API payloads.
+    Instantiates a structured Message wrapper parsing base incoming payloads.
+    @param data Dictionary block encoding incoming API properties
+    @param restClient Application HTTP network client layer interface
+    @return A new Message structure wrapper
 ]]
 function Message.new(data: { [string]: any }, restClient: any): Message
     local authorObj = User.new(data.author or {})
@@ -134,6 +162,11 @@ local function normalizePayload(optionsOrContent: any): { [string]: any }
     return payload
 end
 
+--[[
+    Dispatches a reply targeting this original message context ID.
+    @param contentOrOptions String text content or constructed parameter maps
+    @return Success condition alongside the newly created Message object wrapper if successful
+]]
 function MessageMT:reply(contentOrOptions: any): (boolean, Message?)
     if not self._rest then
         return false, nil
@@ -155,6 +188,11 @@ function MessageMT:reply(contentOrOptions: any): (boolean, Message?)
     end
 end
 
+--[[
+    Edits the text body, embedded cards, or UI layouts appended to this message.
+    @param newContentOrOptions Updated message content strings or structured tables
+    @return Success condition alongside the updated Message structure wrapper
+]]
 function MessageMT:edit(newContentOrOptions: any): (boolean, Message?)
     if not self._rest then
         return false, nil
@@ -169,12 +207,21 @@ function MessageMT:edit(newContentOrOptions: any): (boolean, Message?)
     end
 end
 
+--[[
+    Permanently wipes/deletes this message from channel storage records.
+    @return True if deletion completes without backend routing faults
+]]
 function MessageMT:delete(): boolean
     if not self._rest then return false end
     local ok, _ = self._rest:delete("/channels/" .. self.channel_id .. "/messages/" .. self.id)
     return ok
 end
 
+--[[
+    Appends an individual Unicode or customized platform reaction emoji to this message.
+    @param emoji String representation or raw format character code
+    @return True if the reaction packet executes correctly
+]]
 function MessageMT:react(emoji: string): boolean
     if not self._rest then return false end
     local encodedEmoji = string.gsub(emoji, "[^%w%-%._~]", function(c)
@@ -184,6 +231,12 @@ function MessageMT:react(emoji: string): boolean
     return ok
 end
 
+--[[
+    Spawns a nested discussion forum sub-thread branching from this message context.
+    @param name Title heading assigned to the newly spawned thread
+    @param autoArchiveMinutes Inactivity timeout threshold boundary (default 1440)
+    @return Success condition alongside the instantiated ThreadChannel wrapper object
+]]
 function MessageMT:startThread(name: string, autoArchiveMinutes: number?): (boolean, ThreadChannel.ThreadChannel?)
     if not self._rest then return false, nil end
     local payload = {

@@ -1,7 +1,7 @@
 --!strict
 
 --[[
-    ThreadChannel Structure — OOP representation of a thread or forum discussion subchannel.
+    ThreadChannel Structure — OOP representation modeling nested forum discussion threads or sub-channels.
 ]]
 
 export type ThreadChannel = {
@@ -37,13 +37,26 @@ export type ThreadChannel = {
     
     _rest: any,
 
-    --[[ Joins the active thread as the current authenticated bot user. ]]
+    --[[
+        Joins the active forum discussion thread using authorized bot credentials.
+        @param self The thread channel instance
+        @return True if successfully joined without API restriction blocks
+    ]]
     join: (self: ThreadChannel) -> boolean,
     
-    --[[ Leaves the active thread. ]]
+    --[[
+        Leaves/withdraws from the target discussion thread scope.
+        @param self The thread channel instance
+        @return True if executed cleanly
+    ]]
     leave: (self: ThreadChannel) -> boolean,
     
-    --[[ Archives or unarchives the thread. ]]
+    --[[
+        Toggles the historical archiving metrics status assigned to the thread.
+        @param self The thread channel instance
+        @param archived Boolean target archiving condition
+        @return True if modification routes to the backend successfully
+    ]]
     setArchived: (self: ThreadChannel, archived: boolean) -> boolean,
 }
 
@@ -52,7 +65,10 @@ local ThreadChannelMT = {}
 ThreadChannelMT.__index = ThreadChannelMT
 
 --[[
-    Instantiates a new ThreadChannel object from a REST or Gateway payload.
+    Instantiates a structured ThreadChannel object wrapper mapped to incoming payload metrics.
+    @param payload Incoming thread attribute metadata dictionary
+    @param restClient Core network REST application dispatcher interface
+    @return A new ThreadChannel instance wrapper
 ]]
 function ThreadChannel.new(payload: { [string]: any }, restClient: any): ThreadChannel
     local threadMeta = payload.thread_metadata or {}
@@ -75,6 +91,10 @@ function ThreadChannel.new(payload: { [string]: any }, restClient: any): ThreadC
     return (self :: any) :: ThreadChannel
 end
 
+--[[
+    Joins the active forum discussion thread using authorized bot credentials.
+    @return True if successfully joined without API restriction blocks
+]]
 function ThreadChannelMT:join(): boolean
     if not self._rest then return false end
     -- Route: PUT /channels/{thread.id}/thread-members/@me
@@ -82,6 +102,10 @@ function ThreadChannelMT:join(): boolean
     return ok
 end
 
+--[[
+    Leaves/withdraws from the target discussion thread scope.
+    @return True if executed cleanly
+]]
 function ThreadChannelMT:leave(): boolean
     if not self._rest then return false end
     -- Route: DELETE /channels/{thread.id}/thread-members/@me
@@ -89,6 +113,11 @@ function ThreadChannelMT:leave(): boolean
     return ok
 end
 
+--[[
+    Toggles the historical archiving metrics status assigned to the thread.
+    @param archived Boolean target archiving condition
+    @return True if modification routes to the backend successfully
+]]
 function ThreadChannelMT:setArchived(archived: boolean): boolean
     if not self._rest then return false end
     -- Route: PATCH /channels/{thread.id}

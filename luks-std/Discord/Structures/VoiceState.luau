@@ -1,7 +1,7 @@
 --!strict
 
 --[[
-    VoiceState Structure — OOP Wrapper representing a user's voice connection state within a channel.
+    VoiceState Structure — OOP Wrapper modeling active channel connectivity state presences.
 ]]
 
 local User = require("./User")
@@ -52,7 +52,9 @@ local VoiceStateMT = {}
 VoiceStateMT.__index = VoiceStateMT
 
 --[[
-    Instantiates a new VoiceState instance from a Gateway payload.
+    Instantiates a structured VoiceState wrapper mapped to state presence payload frames.
+    @param payload Base incoming state attribute dictionary maps
+    @return A new VoiceState instance wrapper
 ]]
 function VoiceState.new(payload: { [string]: any }): VoiceState
     local self = {

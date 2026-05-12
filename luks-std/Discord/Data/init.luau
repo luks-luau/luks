@@ -8,7 +8,7 @@
 local Data = {}
 
 -- [[ Gateway Intents Registry ]]
--- Utiliza inteiros exatos correspondentes à documentação oficial da API do Discord (v10).
+-- Uses exact integer bitmask flags mapped to official Discord API v10 specifications.
 local IntentsFlags = {
     Guilds = bit32.lshift(1, 0),
     GuildMembers = bit32.lshift(1, 1),
@@ -41,9 +41,9 @@ setmetatable(Intents, {
 })
 
 --[[
-    Combina múltiplos Intents utilizando a operação bitwise OR nativa do Luau (bit32.bor).
-    @param ... Inteiros representando cada Intent.
-    @return O bitmask combinado.
+    Combines multiple Intent bitmask flags using native Luau bitwise OR operations (bit32.bor).
+    @param ... Integers representing individual Intent flags
+    @return The composed aggregate bitmask integer
 ]]
 function Intents.create(...: number): number
     local result = 0
@@ -57,7 +57,8 @@ function Intents.create(...: number): number
 end
 
 --[[
-    Retorna os Intents padrões recomendados para a maioria dos bots comuns.
+    Returns standard recommended Intent subscriptions suitable for ordinary bot operations.
+    @return The default composed bitmask integer
 ]]
 function Intents.default(): number
     return Intents.create(
@@ -68,7 +69,9 @@ function Intents.default(): number
 end
 
 --[[
-    Retorna todos os Intents possíveis ativados (requer permissão no portal Developer do Discord).
+    Returns an unconstrained bitmask activating all possible Gateway Intents.
+    Note: Privileged intents require explicit activation within the Discord Developer portal.
+    @return The comprehensive bitmask integer
 ]]
 function Intents.all(): number
     local result = 0
@@ -78,7 +81,10 @@ function Intents.all(): number
     return result
 end
 
---[[ Retorna o valor 0 (nenhum intent ativado). ]]
+--[[
+    Returns an empty subscription mask (no active intents).
+    @return Zero bitmask integer
+]]
 function Intents.none(): number
     return 0
 end
