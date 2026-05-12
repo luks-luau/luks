@@ -41,38 +41,54 @@ print(mymodule.hello())
 
 ### Loading Native Modules
 
-luks-luau can load native modules that export a `luau_export` function. These modules receive direct access to the Luau VM:
+luks-luau loads dynamically compiled native plugins (`.dll`, `.so`, `.dylib`) at runtime via `dlopen()`.
+
+#### The VTable Architecture (`luks-module-sys`)
+
+> [!IMPORTANT]  
+> **Architectural Shift:** Previously, plugins linked directly against local static copies of the Luau VM internals via `mlua-sys`. On operating systems like Windows, this resulted in independent memory allocators and separate garbage collection heaps between the Host executable and loaded DLLs, causing severe **Segmentation Faults** during async execution cycles.
+> 
+> To guarantee stable cross-platform FFI boundaries, luks-luau implements a strict **VTable-based Proxy Pattern** via the `luks-module-sys` crate. Native libraries no longer compile their own VM state; instead, the runtime dynamically injects a function pointer table (`LuauAPI`) directly into the module handshake.
 
 ```lua
--- Load a native module (only modules with luau_export entrypoint)
+-- Load a native module
 local mylib = dlopen("./mylib")
-print(mylib.hello())  -- "Greetings from Rust!"
+print(mylib.hello())    -- "Greetings from Rust!"
 print(mylib.version)    -- "1.0.0"
 ```
 
-Creating a native module in Rust:
+Creating a safe, highly-performant native module in Rust using our centralized proxy:
 
 ```rust
-use mlua_sys::luau::*;
+use luks_module_sys::*;
 
+/// Entrypoint for native module loading.
+///
+/// # Safety
+/// - `l` must be a valid Luau `lua_State*`.
+/// - `api` must be a valid pointer to the host's `LuauAPI`.
 #[no_mangle]
-pub unsafe extern "C-unwind" fn luau_export(l: *mut lua_State) -> i32 {
-    // Create a new table to return
+pub unsafe extern "C-unwind" fn luau_export(
+    l: *mut lua_State,
+    api: *const LuauAPI,
+) -> std::os::raw::c_int {
+    // 1. Handshake: Initializes the shared host VTable for this module instance.
+    init_api(api);
+
+    // 2. Transparent Execution: All subsequent Luau C-API calls seamlessly route
+    // through inline wrappers targeting the injected host pointers.
     lua_createtable(l, 0, 2);
 
-    // Add a function
-    lua_pushcfunction(l, lua_hello);
+    lua_pushcclosure(l, lua_hello, c"lua_hello".as_ptr(), 0);
     lua_setfield(l, -2, c"hello".as_ptr());
 
-    // Add a version string
     lua_pushstring(l, c"1.0.0".as_ptr());
     lua_setfield(l, -2, c"version".as_ptr());
 
-    // Return the table (already on stack)
     1
 }
 
-unsafe extern "C-unwind" fn lua_hello(l: *mut lua_State) -> i32 {
+unsafe extern "C-unwind" fn lua_hello(l: *mut lua_State) -> std::os::raw::c_int {
     lua_pushstring(l, c"Greetings from Rust!".as_ptr());
     1
 }

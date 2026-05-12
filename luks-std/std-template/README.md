@@ -12,20 +12,23 @@ This template demonstrates how to create a native library that exports functiona
 
 When creating a native module for Luau, you must export a function named `luau_export`. This function:
 
-- Receives a `*mut lua_State` pointer (the Luau VM state) when loaded via `dlopen`
+- Receives a `*mut lua_State` pointer (the Luau VM state) and a `*const LuauAPI` VTable pointer when loaded via `dlopen`
 - Returns an integer indicating the number of values pushed onto the Lua stack
 - Typically returns a table containing the module's functions and values
 
 ```rust
-#[unsafe(no_mangle)]
-pub unsafe extern "C-unwind" fn luau_export(l: *mut lua_State, api: *const LuauAPI) -> i32 {
-    unsafe {
-        init_api(api);
-        // Create and return a table with module functions
-        lua_createtable(l, 0, 2);
-        // ... push functions and values
-        1 // Return 1 to indicate one value (the table) was pushed
-    }
+use luks_module_sys::*;
+
+#[no_mangle]
+pub unsafe extern "C-unwind" fn luau_export(
+    l: *mut lua_State,
+    api: *const LuauAPI,
+) -> std::os::raw::c_int {
+    init_api(api);
+    // Create and return a table with module functions
+    lua_createtable(l, 0, 2);
+    // ... push functions and values
+    1 // Return 1 to indicate one value (the table) was pushed
 }
 ```
 
