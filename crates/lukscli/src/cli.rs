@@ -7,6 +7,7 @@ use std::path::PathBuf;
     about = "Luks Luau CLI",
     disable_version_flag = true,
     disable_help_flag = true,
+    disable_help_subcommand = true,
     allow_hyphen_values = true
 )]
 pub struct Cli {
