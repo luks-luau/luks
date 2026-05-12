@@ -376,15 +376,38 @@ pub unsafe extern "C-unwind" fn luks_execute(
     source: *const i8,
     chunk_name: *const i8,
 ) -> *mut i8 {
-    ffi_utils::ffi_catch_unwind(|| luks_execute_impl(rt, source, chunk_name))
+    luks_execute_with_args(rt, source, chunk_name, ptr::null(), 0)
+}
+
+/// Executes Luau source code inside an existing runtime, passing custom string arguments to the chunk varargs.
+///
+/// Returns a null pointer on success. On failure, returns an allocated C string
+/// describing the error; the caller must free it with [`luks_free_error`].
+///
+/// # Safety
+/// - `rt` must be a valid pointer returned by [`luks_new`].
+/// - `source` must be a valid, NUL-terminated UTF-8 string.
+/// - `chunk_name` must be a valid, NUL-terminated UTF-8 string (or null).
+/// - `args_ptr` must be a valid pointer to an array of `args_len` valid, NUL-terminated UTF-8 strings (or null if `args_len` is 0).
+#[no_mangle]
+pub unsafe extern "C-unwind" fn luks_execute_with_args(
+    rt: *mut LuksRuntime,
+    source: *const i8,
+    chunk_name: *const i8,
+    args_ptr: *const *const i8,
+    args_len: usize,
+) -> *mut i8 {
+    ffi_utils::ffi_catch_unwind(|| luks_execute_impl(rt, source, chunk_name, args_ptr, args_len))
         .unwrap_or(ptr::null_mut())
 }
 
-/// Internal `luks_execute` implementation with safe error handling.
+/// Internal `luks_execute` implementation with safe error handling and custom vararg support.
 unsafe fn luks_execute_impl(
     rt: *mut LuksRuntime,
     source: *const i8,
     chunk_name: *const i8,
+    args_ptr: *const *const i8,
+    args_len: usize,
 ) -> *mut c_char {
     if rt.is_null() || source.is_null() {
         return ffi_utils::ffi_error_msg("runtime ou source nulo");
@@ -406,6 +429,20 @@ unsafe fn luks_execute_impl(
             }
         }
     };
+
+    // Extract command line arguments into a string vector
+    let mut args_vec = Vec::with_capacity(args_len);
+    if !args_ptr.is_null() && args_len > 0 {
+        let slice = std::slice::from_raw_parts(args_ptr, args_len);
+        for &ptr in slice {
+            if !ptr.is_null() {
+                let s = CStr::from_ptr(ptr).to_string_lossy().into_owned();
+                args_vec.push(s);
+            } else {
+                args_vec.push(String::new());
+            }
+        }
+    }
 
     // Set `__script_dir__` so `@self/` path resolution works correctly.
     let name_path = name_str.strip_prefix('@').unwrap_or(name_str);
@@ -429,8 +466,19 @@ unsafe fn luks_execute_impl(
         }
     };
 
-    // Push the main thread to the scheduler, track it, and get the ThreadId
-    let thread_id = match rt.scheduler.push_thread_front(thread, ()) {
+    // Convert the argument vector into multiple distinct Lua values pushed flatly onto the stack
+    use mlua::IntoLua;
+    let mut values = Vec::with_capacity(args_vec.len());
+    for s in args_vec {
+        match s.into_lua(&rt.lua) {
+            Ok(val) => values.push(val),
+            Err(e) => return ffi_utils::ffi_error_msg(format!("arg conversion error: {}", e)),
+        }
+    }
+    let multi_args = mlua::MultiValue::from_vec(values);
+
+    // Push the main thread to the scheduler, track it, and pass the string multi-arguments
+    let thread_id = match rt.scheduler.push_thread_front(thread, multi_args) {
         Ok(id) => id,
         Err(e) => {
             return ffi_utils::ffi_error_msg(format!("scheduler push error: {}", e));

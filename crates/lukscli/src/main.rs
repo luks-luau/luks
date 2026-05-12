@@ -43,13 +43,14 @@ fn main() -> Result<()> {
             } else {
                 Commands::Run {
                     path: PathBuf::from(&cli.trailing[0]),
+                    args: cli.trailing[1..].to_vec(),
                 }
             }
         }
     };
 
     match cmd {
-        Commands::Run { path } => cmd_run(&path)?,
+        Commands::Run { path, args } => cmd_run(&path, &args)?,
         Commands::Eval { code } => cmd_eval(&code)?,
         Commands::Repl => repl::run_repl()?,
         Commands::Version => cmd_version()?,
@@ -58,17 +59,17 @@ fn main() -> Result<()> {
     Ok(())
 }
 
-fn cmd_run(path: &PathBuf) -> Result<()> {
+fn cmd_run(path: &PathBuf, args: &[String]) -> Result<()> {
     let rt = runtime::RuntimeHandle::load()?;
     let absolute_path = std::fs::canonicalize(path)?;
     let source = std::fs::read_to_string(&absolute_path)?;
     let chunk_name = absolute_path.to_string_lossy().to_string();
-    rt.execute(&source, &chunk_name)
+    rt.execute(&source, &chunk_name, args)
 }
 
 fn cmd_eval(code: &str) -> Result<()> {
     let rt = runtime::RuntimeHandle::load()?;
-    rt.execute(code, "<eval>")
+    rt.execute(code, "<eval>", &[])
 }
 
 fn cmd_version() -> Result<()> {

@@ -6,7 +6,13 @@ use std::ffi::CStr;
 pub struct RuntimeHandle {
     _lib: Library,
     new: unsafe extern "C-unwind" fn() -> *mut std::ffi::c_void,
-    exec: unsafe extern "C-unwind" fn(*mut std::ffi::c_void, *const i8, *const i8) -> *mut i8,
+    exec_with_args: unsafe extern "C-unwind" fn(
+        *mut std::ffi::c_void,
+        *const i8,
+        *const i8,
+        *const *const i8,
+        usize,
+    ) -> *mut i8,
     free: unsafe extern "C-unwind" fn(*mut i8),
     destroy: unsafe extern "C-unwind" fn(*mut std::ffi::c_void),
     version: unsafe extern "C-unwind" fn() -> *const i8,
@@ -37,7 +43,7 @@ impl RuntimeHandle {
 
         // Resolve symbols while `lib` is still borrowed (before moving into struct).
         let new = unsafe { get_symbol(&lib, "luks_new")? };
-        let exec = unsafe { get_symbol(&lib, "luks_execute")? };
+        let exec_with_args = unsafe { get_symbol(&lib, "luks_execute_with_args")? };
         let free = unsafe { get_symbol(&lib, "luks_free_error")? };
         let destroy = unsafe { get_symbol(&lib, "luks_destroy")? };
         let version = unsafe { get_symbol(&lib, "luks_version")? };
@@ -46,7 +52,7 @@ impl RuntimeHandle {
         Ok(Self {
             _lib: lib,
             new,
-            exec,
+            exec_with_args,
             free,
             destroy,
             version,
@@ -67,10 +73,18 @@ impl RuntimeHandle {
         }
     }
 
-    /// Executes source code with a provided chunk name.
-    pub fn execute(&self, source: &str, chunk_name: &str) -> Result<()> {
+    /// Executes source code with a provided chunk name and command line arguments.
+    pub fn execute(&self, source: &str, chunk_name: &str, args: &[String]) -> Result<()> {
         let c_src = std::ffi::CString::new(source)?;
         let c_chunk = std::ffi::CString::new(chunk_name)?;
+
+        // Prepare C strings for arguments
+        let c_args: Result<Vec<_>, _> = args
+            .iter()
+            .map(|s| std::ffi::CString::new(s.as_str()))
+            .collect();
+        let c_args = c_args?;
+        let c_args_ptrs: Vec<_> = c_args.iter().map(|cs| cs.as_ptr()).collect();
 
         unsafe {
             let new_fn: extern "C-unwind" fn() -> *mut std::ffi::c_void =
@@ -79,7 +93,9 @@ impl RuntimeHandle {
                 *mut std::ffi::c_void,
                 *const i8,
                 *const i8,
-            ) -> *mut i8 = std::mem::transmute(self.exec);
+                *const *const i8,
+                usize,
+            ) -> *mut i8 = std::mem::transmute(self.exec_with_args);
             let free_fn: extern "C-unwind" fn(*mut i8) = std::mem::transmute(self.free);
             let destroy_fn: extern "C-unwind" fn(*mut std::ffi::c_void) =
                 std::mem::transmute(self.destroy);
@@ -89,7 +105,13 @@ impl RuntimeHandle {
                 anyhow::bail!("Failed to initialize runtime");
             }
 
-            let err = exec_fn(rt, c_src.as_ptr(), c_chunk.as_ptr());
+            let err = exec_fn(
+                rt,
+                c_src.as_ptr(),
+                c_chunk.as_ptr(),
+                c_args_ptrs.as_ptr(),
+                c_args_ptrs.len(),
+            );
             destroy_fn(rt);
 
             if !err.is_null() {
