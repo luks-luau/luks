@@ -4,7 +4,78 @@ use std::path::Path;
 use std::sync::Mutex;
 
 /// Type of the `luau_export` entrypoint from loaded libraries.
-pub type LuauExport = unsafe extern "C-unwind" fn(*mut mlua::ffi::lua_State) -> i32;
+pub type LuauExport =
+    unsafe extern "C-unwind" fn(*mut mlua::ffi::lua_State, *const luks_module_sys::LuauAPI) -> i32;
+
+/// The global VTable instance with pointers to the actual functions from `mlua_sys`.
+pub static HOST_LUAU_API: luks_module_sys::LuauAPI = luks_module_sys::LuauAPI {
+    lua_createtable: mlua_sys::luau::lua_createtable,
+    lua_pushstring: wrap_lua_pushstring,
+    lua_pushcfunction: wrap_lua_pushcfunction,
+    lua_pushcclosurek: wrap_lua_pushcclosurek,
+    lua_setfield: mlua_sys::luau::lua_setfield,
+    lua_getfield: mlua_sys::luau::lua_getfield,
+    lua_getglobal: wrap_lua_getglobal,
+    lua_pushvalue: mlua_sys::luau::lua_pushvalue,
+    lua_pushnil: mlua_sys::luau::lua_pushnil,
+    lua_pushinteger: wrap_lua_pushinteger,
+    lua_pushnumber: mlua_sys::luau::lua_pushnumber,
+    lua_pushboolean: mlua_sys::luau::lua_pushboolean,
+    lua_type: mlua_sys::luau::lua_type,
+    lua_tostring: wrap_lua_tostring,
+    lua_call: mlua_sys::luau::lua_call,
+};
+
+unsafe extern "C-unwind" fn wrap_lua_pushstring(
+    l: *mut mlua_sys::luau::lua_State,
+    s: *const std::os::raw::c_char,
+) {
+    mlua_sys::luau::lua_pushstring(l, s);
+}
+
+unsafe extern "C-unwind" fn wrap_lua_pushcfunction(
+    l: *mut mlua_sys::luau::lua_State,
+    f: mlua_sys::luau::lua_CFunction,
+    name: *const std::os::raw::c_char,
+) {
+    mlua_sys::luau::lua_pushcclosurek(l, f, name, 0, None);
+}
+
+unsafe extern "C-unwind" fn wrap_lua_pushcclosurek(
+    l: *mut mlua_sys::luau::lua_State,
+    f: mlua_sys::luau::lua_CFunction,
+    name: *const std::os::raw::c_char,
+    nup: std::os::raw::c_int,
+    cont: Option<
+        unsafe extern "C-unwind" fn(
+            *mut mlua_sys::luau::lua_State,
+            std::os::raw::c_int,
+        ) -> std::os::raw::c_int,
+    >,
+) {
+    mlua_sys::luau::lua_pushcclosurek(l, f, name, nup, cont);
+}
+
+unsafe extern "C-unwind" fn wrap_lua_getglobal(
+    l: *mut mlua_sys::luau::lua_State,
+    name: *const std::os::raw::c_char,
+) -> std::os::raw::c_int {
+    mlua_sys::luau::lua_getglobal(l, name)
+}
+
+unsafe extern "C-unwind" fn wrap_lua_pushinteger(
+    l: *mut mlua_sys::luau::lua_State,
+    n: mlua_sys::luau::lua_Integer,
+) {
+    mlua_sys::luau::lua_pushinteger(l, n);
+}
+
+unsafe extern "C-unwind" fn wrap_lua_tostring(
+    l: *mut mlua_sys::luau::lua_State,
+    idx: std::os::raw::c_int,
+) -> *const std::os::raw::c_char {
+    mlua_sys::luau::lua_tostring(l, idx)
+}
 
 // Keep libraries alive for the process lifetime.
 // The `luau_export` symbol must remain valid after lookup.
@@ -18,12 +89,12 @@ pub fn load_export(path: &Path) -> Result<LuauExport, String> {
 
     let libs = LOADED_LIBS
         .lock()
-        .map_err(|_| "falha ao adquirir lock de LOADED_LIBS".to_string())?;
+        .map_err(|_| "failed to acquire lock on LOADED_LIBS".to_string())?;
 
     if let Some((_, lib)) = libs.iter().find(|(p, _)| *p == key) {
         let symbol: Symbol<LuauExport> = unsafe {
             lib.get(b"luau_export\0")
-                .map_err(|e| format!("símbolo 'luau_export' não encontrado: {}", e))?
+                .map_err(|e| format!("symbol 'luau_export' not found: {}", e))?
         };
         return Ok(*symbol);
     }
@@ -31,24 +102,24 @@ pub fn load_export(path: &Path) -> Result<LuauExport, String> {
 
     let library = unsafe {
         Library::new(&key)
-            .map_err(|e| format!("falha ao carregar biblioteca '{}': {}", key.display(), e))?
+            .map_err(|e| format!("failed to load library '{}': {}", key.display(), e))?
     };
 
     let symbol: Symbol<LuauExport> = unsafe {
         library
             .get(b"luau_export\0")
-            .map_err(|e| format!("símbolo 'luau_export' não encontrado: {}", e))?
+            .map_err(|e| format!("symbol 'luau_export' not found: {}", e))?
     };
 
     let func: LuauExport = *symbol;
 
     let mut libs = LOADED_LIBS
         .lock()
-        .map_err(|_| "falha ao adquirir lock de LOADED_LIBS".to_string())?;
+        .map_err(|_| "failed to acquire lock on LOADED_LIBS".to_string())?;
     if let Some((_, lib)) = libs.iter().find(|(p, _)| *p == key) {
         let symbol: Symbol<LuauExport> = unsafe {
             lib.get(b"luau_export\0")
-                .map_err(|e| format!("símbolo 'luau_export' não encontrado: {}", e))?
+                .map_err(|e| format!("symbol 'luau_export' not found: {}", e))?
         };
         return Ok(*symbol);
     }
@@ -60,7 +131,7 @@ pub fn load_export(path: &Path) -> Result<LuauExport, String> {
 pub fn clear_loaded_libs() -> Result<(), String> {
     let mut libs = LOADED_LIBS
         .lock()
-        .map_err(|_| "falha ao adquirir lock de LOADED_LIBS".to_string())?;
+        .map_err(|_| "failed to acquire lock on LOADED_LIBS".to_string())?;
     libs.clear();
     Ok(())
 }

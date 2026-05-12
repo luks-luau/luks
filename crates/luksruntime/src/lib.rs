@@ -212,7 +212,7 @@ unsafe fn lua_dlopen_impl(l: *mut ffi::lua_State) -> i32 {
     let path_str = path.to_string_lossy().to_string();
 
     match loader.load(&path_str) {
-        Ok(export) => export(l),
+        Ok(export) => export(l, &loader::platform::HOST_LUAU_API),
         Err(e) => lua_error(l, e),
     }
 }

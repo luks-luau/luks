@@ -1,4 +1,4 @@
-mod platform;
+pub mod platform;
 pub mod search;
 
 pub use platform::clear_loaded_libs;
