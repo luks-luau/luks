@@ -2,6 +2,7 @@
 -- Discovers numbered case files per category and executes them.
 
 local h = require("./helpers")
+local args = {...}
 
 -- Get expect functions
 local expect = {
@@ -16,7 +17,7 @@ local expect = {
 }
 
 -- Auto-discovered test categories.
-local categories = { "require", "dlopen", "task", "signal", "json", "http", "websocket", "zlib", "crypto", "process" }
+local categories = args[1] ~= nil and args or { "require", "dlopen", "task", "signal", "json", "http", "websocket", "zlib", "crypto", "process" }
 local test_cases = {}
 
 -- Cache for loaded test cases
