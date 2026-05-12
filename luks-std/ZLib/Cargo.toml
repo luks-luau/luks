@@ -1,0 +1,11 @@
+[package]
+name = "zlib"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+luks-module-sys = { path = "../../crates/luks-module-sys" }
+flate2 = "1.0"
