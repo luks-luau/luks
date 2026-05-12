@@ -1,4 +1,4 @@
-use mlua_sys::luau::*;
+use luks_module_sys::*;
 
 /// Entrypoint for native module loading.
 ///
@@ -6,8 +6,9 @@ use mlua_sys::luau::*;
 /// - `l` must be a valid Luau `lua_State*`.
 /// - The stack must be in a valid state for creating and returning a table.
 #[unsafe(no_mangle)]
-pub unsafe extern "C-unwind" fn luau_export(l: *mut lua_State) -> i32 {
+pub unsafe extern "C-unwind" fn luau_export(l: *mut lua_State, api: *const LuauAPI) -> i32 {
     unsafe {
+        init_api(api);
         lua_createtable(l, 0, 2);
 
         lua_pushcfunction(l, lua_hello);

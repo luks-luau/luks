@@ -18,8 +18,9 @@ When creating a native module for Luau, you must export a function named `luau_e
 
 ```rust
 #[unsafe(no_mangle)]
-pub unsafe extern "C-unwind" fn luau_export(l: *mut lua_State) -> i32 {
+pub unsafe extern "C-unwind" fn luau_export(l: *mut lua_State, api: *const LuauAPI) -> i32 {
     unsafe {
+        init_api(api);
         // Create and return a table with module functions
         lua_createtable(l, 0, 2);
         // ... push functions and values
@@ -86,4 +87,4 @@ end
 
 ## Dependencies
 
-- `mlua-sys` with the `luau` feature enabled for Luau VM FFI bindings
+- `luks-module-sys` to access the VTable and Luau C API bindings
