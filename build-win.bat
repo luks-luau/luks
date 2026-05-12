@@ -59,17 +59,15 @@ if !errorlevel! neq 0 (
     REM O script elevado agora é gerado com os caminhos salvos em variáveis de ambiente,
     REM que não são expandidas diretamente pelo cmd.exe, eliminando o erro.
     set "ELEVATED_PS=%TEMP%\luks_install_elevated.ps1"
-    set "LUKS_ELEVATED_DST=!INSTALL_BIN!"
-    set "LUKS_ELEVATED_SRC=!CD!\target\release"
 
-    REM A geração do script .ps1 usa apenas eco simples, sem blocos parênteses problemáticos.
-    (
-        echo $dst = $env:LUKS_ELEVATED_DST
-        echo $srcDir = $env:LUKS_ELEVATED_SRC
-        echo New-Item -ItemType Directory -Force -Path $dst ^| Out-Null
-        echo Copy-Item -LiteralPath "$srcDir\lukscli.exe" -Destination "$dst\luks.exe" -Force
-        echo Copy-Item -LiteralPath "$srcDir\luksruntime.dll" -Destination "$dst\luksruntime.dll" -Force
-    ) > "!ELEVATED_PS!"
+    REM Escrevemos linha a linha usando aspas simples do PowerShell para injetar as strings literais absolutas.
+    REM Isso garante que a sessão elevada do UAC receba os caminhos exatos (já que variáveis de ambiente locais não são herdadas na elevação)
+    REM e evita completamente qualquer erro de parênteses no Batch CMD por não usar blocos (...)
+    echo $dst = '!INSTALL_BIN!' > "!ELEVATED_PS!"
+    echo $srcDir = '!CD!\target\release' >> "!ELEVATED_PS!"
+    echo New-Item -ItemType Directory -Force -Path $dst ^| Out-Null >> "!ELEVATED_PS!"
+    echo Copy-Item -LiteralPath "$srcDir\lukscli.exe" -Destination "$dst\luks.exe" -Force >> "!ELEVATED_PS!"
+    echo Copy-Item -LiteralPath "$srcDir\luksruntime.dll" -Destination "$dst\luksruntime.dll" -Force >> "!ELEVATED_PS!"
 
     powershell -NoProfile -ExecutionPolicy Bypass -Command "Start-Process -FilePath powershell -ArgumentList '-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File ""!ELEVATED_PS!""' -Verb RunAs -Wait -WindowStyle Hidden"
     set "ELEVATE_EXIT=!errorlevel!"
