@@ -24,6 +24,25 @@ pub static HOST_LUAU_API: luks_module_sys::LuauAPI = luks_module_sys::LuauAPI {
     lua_type: mlua_sys::luau::lua_type,
     lua_tostring: wrap_lua_tostring,
     lua_call: mlua_sys::luau::lua_call,
+
+    lua_pushlstring: mlua_sys::luau::lua_pushlstring,
+    lua_tolstring: mlua_sys::luau::lua_tolstring,
+    lua_gettop: mlua_sys::luau::lua_gettop,
+    lua_settop: mlua_sys::luau::lua_settop,
+    lua_remove: mlua_sys::luau::lua_remove,
+    lua_insert: mlua_sys::luau::lua_insert,
+    lua_absindex: mlua_sys::luau::lua_absindex,
+    lua_gettable: mlua_sys::luau::lua_gettable,
+    lua_settable: mlua_sys::luau::lua_settable,
+    lua_rawgeti: mlua_sys::luau::lua_rawgeti,
+    lua_rawseti: mlua_sys::luau::lua_rawseti,
+    lua_next: mlua_sys::luau::lua_next,
+    lua_error: mlua_sys::luau::lua_error,
+    lua_tonumberx: mlua_sys::luau::lua_tonumberx,
+    lua_tointegerx: mlua_sys::luau::lua_tointegerx,
+    lua_toboolean: mlua_sys::luau::lua_toboolean,
+    lua_topointer: mlua_sys::luau::lua_topointer,
+
 };
 
 unsafe extern "C-unwind" fn wrap_lua_pushstring(
