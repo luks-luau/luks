@@ -1,6 +1,11 @@
 local ok, native_or_err = pcall(function()
     return dlopen("@self/../../../../target/debug/testmodule")
 end)
+if not ok then
+    ok, native_or_err = pcall(function()
+        return dlopen("@self/../../../../target/release/testmodule")
+    end)
+end
 
 return {
     load_ok = ok,

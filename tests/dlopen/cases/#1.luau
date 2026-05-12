@@ -7,6 +7,11 @@ local function load_testmodule(expect)
     local ok, result = pcall(function()
         return dlopen("@self/../../../target/debug/testmodule")
     end)
+    if not ok then
+        ok, result = pcall(function()
+            return dlopen("@self/../../../target/release/testmodule")
+        end)
+    end
 
     expect.true_(ok, "dlopen should not raise for testmodule")
     expect.not_nil(result, "dlopen should return module table")
