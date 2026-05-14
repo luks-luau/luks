@@ -14,6 +14,7 @@ luks-luau is a high-performance Luau runtime designed for general-purpose script
 ### Key Features
 
 - **Script Execution**: Run Luau scripts via CLI (`lukscli run script.luau`)
+- **Static Analysis**: Verify type safety and detect lint warnings via native `lukschecker` (`lukscli check .`)
 - **Custom `require()`**: Module system with caching and `@self/` path resolution
 - **Native Module Loading**: Load dynamic libraries (`.dll`, `.so`, `.dylib`) that export `luau_export`
 - **Async Task Scheduling**: Built-in `task` module with `spawn`, `defer`, `delay`, `cancel`, and `wait`
@@ -122,6 +123,18 @@ task.wait(0.5)
 print("Done waiting in main thread")
 ```
 
+### Static Analysis (`lukschecker`)
+
+luks-luau integrates a highly performant native analysis engine via the `lukschecker` module. You can statically verify standard definitions, global types, and lint codebases for deprecated API usage directly from the command line:
+
+```bash
+# Check all files in the current workspace
+lukscli check .
+
+# Or verify a targeted module path
+lukscli check ./src/module.luau
+```
+
 ## Standard Library (`luks-std`)
 
 The workspace hosts a collection of highly-optimized native extensions implemented in Rust under the `luks-std/` directory. These submodules link seamlessly into the runtime to bridge OS capabilities directly to Luau logic:
@@ -163,6 +176,9 @@ lukscli eval "print('Hello from Luau!')"
 
 # Start interactive REPL
 lukscli repl
+
+# Check codebase for type and lint errors
+lukscli check .
 
 # With permission flags
 lukscli --no-native run script.luau      # Deny native module loading
