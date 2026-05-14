@@ -28,7 +28,7 @@ return function(expect)
         h.test("task.wait returns elapsed time", function()
             local start = os.clock()
             local elapsed = task.wait(0.1)
-            local actual = os.clock() - start
+            local _actual = os.clock() - start
             expect.type_(elapsed, "number", "wait should return a number")
             expect.true_(elapsed >= 0, "elapsed time should be positive")
         end)

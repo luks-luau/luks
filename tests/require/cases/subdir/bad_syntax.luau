@@ -1,2 +1,2 @@
--- Intentionally invalid Luau syntax for require error-path tests
+--!nocheck
 local x =

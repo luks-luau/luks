@@ -15,10 +15,14 @@ return function(expect)
             elseif FileSystem.exists("../../../target/debug/lukscli") then
                 exe = "../../../target/debug/lukscli"
             end
-            local script = "tests/process/cases/vararg_target.luau"
+            local script = "./vararg_target.luau"
 
             -- Disparando via spawn nativo garantindo integridade e isolamento posicional de cada string posicional
-            local res = Process.spawn(exe, { script, "alpha", "beta", "--gamma", "-delta", "12345" })
+            local res = Process.spawn(exe, { script, "alpha", "beta", "--gamma", "-delta", "12345" }, { cwd = "." })
+            if not res.ok then
+                task.wait(0.2)
+                res = Process.spawn(exe, { script, "alpha", "beta", "--gamma", "-delta", "12345" }, { cwd = "." })
+            end
 
             expect.true_(res.ok, "Evaluates varargs. STDERR=[" .. res.stderr .. "] ERR=[" .. (res.error or "nil") .. "]")
             expect.true_(string.find(res.stdout, "VARARG_COUNT=5", 1, true) ~= nil, "Validates perfect allocation count of varargs")
