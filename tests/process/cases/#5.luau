@@ -4,7 +4,17 @@ local Process = require("../../../luks-std/Process")
 return function(expect)
     h.suite("CLI Infinite Vararg Forwarding Integration", function()
         h.test("cli runtime propagates infinite command line tails to script varargs", function()
-            local exe = if Process.os() == "windows" then "target\\release\\lukscli.exe" else "./target/release/lukscli"
+            local FileSystem = require("../../../luks-std/FileSystem")
+            local exe = "luks"
+            if FileSystem.exists("../../../target/release/lukscli.exe") then
+                exe = "../../../target/release/lukscli.exe"
+            elseif FileSystem.exists("../../../target/debug/lukscli.exe") then
+                exe = "../../../target/debug/lukscli.exe"
+            elseif FileSystem.exists("../../../target/release/lukscli") then
+                exe = "../../../target/release/lukscli"
+            elseif FileSystem.exists("../../../target/debug/lukscli") then
+                exe = "../../../target/debug/lukscli"
+            end
             local script = "tests/process/cases/vararg_target.luau"
 
             -- Disparando via spawn nativo garantindo integridade e isolamento posicional de cada string posicional

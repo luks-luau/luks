@@ -11,6 +11,20 @@ The **Process** submodule implements a highly robust, multi-tier execution inter
 - **Hardware Telemetry**: Query active host hardware compilation architectures (`Process.arch`) and running OS kernels (`Process.os`).
 - **Asynchronous Execution Loops**: Seamless background tasks powered by non-blocking event mechanisms (`Signal`) via `*Async` methods.
 
+---
+
+## Path Resolution Semantics
+
+The `Process` module integrates context-aware caller-based path resolution for executable targets and working directory configurations, establishing complete parity with `FileSystem` and native `require()` mechanics.
+
+### Spawning Resolution Rules
+
+1. **System `PATH` Programs**: Pure/bare commands containing no directory separators (e.g., `"git"`, `"luks"`, `"cargo"`) are preserved exactly as provided. This ensures standard host operating system lookups traverse environmental `PATH` variables correctly.
+2. **Context-Relative Targets**: Executable paths containing directory separators (`/` or `\`) or explicitly prefixed with `@self`, `./`, or `../` are automatically resolved relative to the physical file location of the script invoking the evaluation.
+3. **Working Directory Overrides (`options.cwd`)**: If a custom working directory string is provided via `options.cwd`, it is fully resolved contextually relative to the invoking script directory prior to launch.
+
+---
+
 ## API Reference
 
 ### Spawning Subprocesses
