@@ -15,6 +15,22 @@ The module re-exports Rust's highly optimized `std::fs` operations, guaranteeing
 
 ---
 
+## Path Resolution Semantics
+
+The `FileSystem` module integrates a sophisticated context-aware path resolution engine providing complete architectural parity with the native `require()` and `dlopen()` mechanisms. Rather than operating relative to the terminal's arbitrary Current Working Directory (CWD), path arguments are autonomously resolved relative to the physical location of the script file invoking the operation.
+
+### Resolution Rules
+
+1. **Absolute Paths**: Strings prefixed with absolute indicators (`/`, `\`, or Windows drive letters like `C:\`) bypass caller resolution and target host storage directly.
+2. **Standard File Modules** (e.g., `tests/cases/script.luau`):
+   - Relative paths, explicit prefixes (`./`, `../`), and **bare implicit names** (e.g., `"data.txt"`) resolve directly from the folder containing the invoking script file.
+   - The `@self` directive points to the invoking script's directory.
+3. **Package Initialization Modules** (`init.luau` or `init.lua`):
+   - **`@self` Directive**: Maps directly to the **module folder** itself (the folder where `init.luau` resides). For example, within `luks-std/FileSystem/init.luau`, `@self` targets `luks-std/FileSystem`.
+   - **Dual-Base Relative Parity**: Explicit relative paths (`./`, `../`) and **bare implicit names** (e.g., `"test"`) behave identically, targeting the **parent directory** of the module folder. For example, within `luks-std/FileSystem/init.luau`, both `"./Process"` and `"Process"` resolve contextually to `luks-std/Process`.
+
+---
+
 ## API Reference
 
 ### Synchronous Operations
