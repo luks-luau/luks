@@ -19,6 +19,7 @@ luks-luau is a high-performance Luau runtime designed for general-purpose script
 - **Native Module Loading**: Load dynamic libraries (`.dll`, `.so`, `.dylib`) that export `luau_export`
 - **Async Task Scheduling**: Built-in `task` module with `spawn`, `defer`, `delay`, `cancel`, and `wait`
 - **Permission System**: Granular control over file access, native loading, and module imports
+- **Granular VM Directives**: Real-time evaluation parsing of `--!native` and `--!optimize` module optimizations
 
 ## Quick Examples
 
@@ -134,6 +135,12 @@ lukscli check .
 # Or verify a targeted module path
 lukscli check ./src/module.luau
 ```
+
+#### Intelligent Build Caching
+To optimize developer workflows across large codebases, `lukschecker` implements an **Intelligent Build Cache Engine** persistent in the native host temporary directory.
+- **Content Hashing**: Computes absolute execution tree hash fingerprints across target files and their recursive `require()` dependency networks. Unchanged files skip validation entirely, resulting in near-instantaneous successive checks.
+- **Path Invariance**: Employs low-level kernel canonicalization (`std::fs::canonicalize`) to maintain storage keys securely across all platforms (Windows, Linux, macOS, and Android), ensuring consistent cache hits regardless of command-line syntax formats (slashes, verbatim strings, or relative variations).
+- **Safety**: Modules producing active compiler warnings or static validation failures are intentionally omitted from caching, forcing live terminal outputs on every run until resolved.
 
 ## Standard Library (`luks-std`)
 
