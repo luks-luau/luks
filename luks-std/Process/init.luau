@@ -110,7 +110,7 @@ local function createAsyncWrapper(syncFn: (...any) -> ProcessOutput): (...any) -
     return function(...: any): AsyncProcessOutput
         local args = { ... }
         local signal = Signal.new() :: Signal.SignalInternal<ProcessOutput>
-        task.spawn(function()
+        task.defer(function()
             local response = syncFn(table.unpack(args))
             signal:Fire(response)
         end)
