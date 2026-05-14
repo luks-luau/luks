@@ -1,0 +1,15 @@
+[package]
+name = "luau-analyzer-sys"
+version = "0.1.0"
+edition = "2021"
+license = { workspace = true }
+repository = { workspace = true }
+
+[lib]
+name = "luau_analyzer_sys"
+crate-type = ["rlib"]
+
+[build-dependencies]
+cc = { version = "1.0", features = ["parallel"] }
+
+[dependencies]

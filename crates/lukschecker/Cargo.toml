@@ -1,0 +1,13 @@
+[package]
+name = "lukschecker"
+version = "0.1.0"
+edition = "2021"
+license = { workspace = true }
+repository = { workspace = true }
+
+[lib]
+name = "lukschecker"
+crate-type = ["cdylib"]
+
+[dependencies]
+luau-analyzer-sys = { path = "../luau-analyzer-sys" }

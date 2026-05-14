@@ -64,4 +64,11 @@ pub enum Commands {
     /// Interactive REPL (used internally for fallback mode).
     #[command(hide = true)]
     Repl,
+
+    /// Checks Luau codebase for type and lint errors.
+    #[command(alias = "c")]
+    Check {
+        /// Optional path to a file or directory to scan. Defaults to current directory.
+        path: Option<PathBuf>,
+    },
 }

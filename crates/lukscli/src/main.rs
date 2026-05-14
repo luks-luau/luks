@@ -1,3 +1,4 @@
+mod checker;
 mod cli;
 mod repl;
 mod runtime;
@@ -55,6 +56,7 @@ fn main() -> Result<()> {
         Commands::Repl => repl::run_repl()?,
         Commands::Version => cmd_version()?,
         Commands::Help => Cli::command().print_help()?,
+        Commands::Check { path } => cmd_check(path)?,
     }
     Ok(())
 }
@@ -82,5 +84,14 @@ fn cmd_version() -> Result<()> {
     println!("│  Runtime     {:<20} │", rt_ver);
     println!("│  Luau VM     {:<20} │", luau_ver);
     println!("╰────────────────────────────────────╯");
+    Ok(())
+}
+
+fn cmd_check(path: Option<PathBuf>) -> Result<()> {
+    let handle = checker::CheckerHandle::load()?;
+    let res = handle.check(path.as_deref())?;
+    if res != 0 {
+        std::process::exit(res);
+    }
     Ok(())
 }
