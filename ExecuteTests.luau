@@ -5,6 +5,17 @@ local Process = require("luks-std/Process")
 local out = Stdio.stdout()
 local cli_args = {...}
 
+local is_ci = Process.getEnv("CI") ~= nil or Process.getEnv("GITHUB_ACTIONS") ~= nil
+
+local luksExe = "luks"
+if FileSystem.exists("target/release/lukscli.exe") then
+    luksExe = "target/release/lukscli.exe"
+elseif FileSystem.exists("target/release/lukscli") then
+    luksExe = "target/release/lukscli"
+elseif FileSystem.exists("./target/release/lukscli") then
+    luksExe = "./target/release/lukscli"
+end
+
 -- Parse execution categories either from provided CLI parameters or autonomously from main.luau
 local categories = {}
 
@@ -57,7 +68,7 @@ for _, category in ipairs(categories) do
         end
     end
 
-    local child = Stdio.spawnStream("luks", { "./tests/main.luau", category })
+    local child = Stdio.spawnStream(luksExe, { "tests/main.luau", category })
     
     local lastSuccessfulTest = nil
     local firstFailedTest = nil
@@ -73,9 +84,17 @@ for _, category in ipairs(categories) do
 
     -- Render clean atomic initial testing state line
     if #scheduledTests > 0 then
-        out:fmt("\r\27[2K[%s] testing: %s", category, formatShort(scheduledTests[1].test:lower())):flush()
+        if is_ci then
+            out:fmt("[%s] testing: %s\n", category, scheduledTests[1].test:lower()):flush()
+        else
+            out:fmt("\r\27[2K[%s] testing: %s", category, formatShort(scheduledTests[1].test:lower())):flush()
+        end
     else
-        out:fmt("\r\27[2K[%s] running...", category):flush()
+        if is_ci then
+            out:fmt("[%s] running...\n", category):flush()
+        else
+            out:fmt("\r\27[2K[%s] running...", category):flush()
+        end
     end
 
     child.onStdout:Connect(function(chunk)
@@ -97,15 +116,23 @@ for _, category in ipairs(categories) do
 
                 if statusStr == "PASS" then
                     lastSuccessfulTest = cleanName:upper()
-                    out:fmt("\r\27[2K[%s] success: %s", category, formatShort(cleanName:lower())):flush()
+                    if is_ci then
+                        out:fmt("[%s] success: %s\n", category, cleanName:lower()):flush()
+                    else
+                        out:fmt("\r\27[2K[%s] success: %s", category, formatShort(cleanName:lower())):flush()
+                    end
                 elseif statusStr == "FAIL" then
                     if not firstFailedTest then
                         firstFailedTest = cleanName:upper()
                     end
-                    out:fmt("\r\27[2K[%s] failed: %s", category, formatShort(cleanName:lower())):flush()
+                    if is_ci then
+                        out:fmt("[%s] failed: %s\n", category, cleanName:lower()):flush()
+                    else
+                        out:fmt("\r\27[2K[%s] failed: %s", category, formatShort(cleanName:lower())):flush()
+                    end
                 end
                 
-                if currentTestIndex <= #scheduledTests then
+                if not is_ci and currentTestIndex <= #scheduledTests then
                     out:fmt("\r\27[2K[%s] testing: %s", category, formatShort(scheduledTests[currentTestIndex].test:lower())):flush()
                 end
             end
@@ -125,7 +152,11 @@ for _, category in ipairs(categories) do
     end
 
     if exitCode == 0 then
-        out:color("green"):fmt("\r\27[2K[%s] ok\n", category):color("reset"):flush()
+        if is_ci then
+            out:color("green"):fmt("[%s] ok\n", category):color("reset"):flush()
+        else
+            out:color("green"):fmt("\r\27[2K[%s] ok\n", category):color("reset"):flush()
+        end
         total_passed += 1
     else
         out:writeLine("") -- Preserve target frozen testing state indicator line
