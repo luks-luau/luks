@@ -5,22 +5,28 @@ set -e
 echo "Building luks-luau for Unix (Linux/macOS)..."
 
 # Step 1: Build luksruntime
-echo "[1/4] Building luksruntime..."
+echo "[1/5] Building luksruntime..."
 cargo build -p luksruntime --release
 
 # Step 2: Runtime naming
-echo "[2/4] Library file ready (no rename needed on Unix)"
+echo "[2/5] Library file ready (no rename needed on Unix)"
+
+# Step 2.5: Build lukschecker
+echo "[3/5] Building lukschecker..."
+cargo build -p lukschecker --release
 
 # Step 3: Build lukscli
-echo "[3/4] Building lukscli..."
+echo "[4/5] Building lukscli..."
 cargo build -p lukscli --release
 
 if [[ "$OSTYPE" == "linux-gnu"* ]]; then
     RUNTIME_SRC="target/release/libluksruntime.so"
+    CHECKER_SRC="target/release/liblukschecker.so"
     SYSTEM_BIN="/usr/local/bin"
     USER_BIN="$HOME/.local/bin"
 elif [[ "$OSTYPE" == "darwin"* ]]; then
     RUNTIME_SRC="target/release/libluksruntime.dylib"
+    CHECKER_SRC="target/release/liblukschecker.dylib"
     SYSTEM_BIN="/usr/local/bin"
     USER_BIN="$HOME/.local/bin"
 else
@@ -29,7 +35,7 @@ else
 fi
 
 # Step 4: Install binaries and ensure PATH
-echo "[4/4] Installing luks and runtime..."
+echo "[5/5] Installing luks, runtime, and checker..."
 INSTALL_BIN="$SYSTEM_BIN"
 USE_FALLBACK=0
 
@@ -53,6 +59,7 @@ fi
 
 cp "target/release/lukscli" "$INSTALL_BIN/luks"
 cp "$RUNTIME_SRC" "$INSTALL_BIN/$(basename "$RUNTIME_SRC")"
+cp "$CHECKER_SRC" "$INSTALL_BIN/$(basename "$CHECKER_SRC")"
 chmod +x "$INSTALL_BIN/luks"
 
 # Try to expose `luks` immediately in current shell by placing a shim
@@ -119,14 +126,17 @@ echo "Build completed successfully!"
 echo "Output:"
 if [[ "$OSTYPE" == "linux-gnu"* ]]; then
     echo "  - libluksruntime.so: target/release/libluksruntime.so"
+    echo "  - liblukschecker.so: target/release/liblukschecker.so"
     echo "  - lukscli: target/release/lukscli"
 elif [[ "$OSTYPE" == "darwin"* ]]; then
     echo "  - libluksruntime.dylib: target/release/libluksruntime.dylib"
+    echo "  - liblukschecker.dylib: target/release/liblukschecker.dylib"
     echo "  - lukscli: target/release/lukscli"
 fi
 echo "Installed:"
 echo "  - luks: $INSTALL_BIN/luks"
 echo "  - $(basename "$RUNTIME_SRC"): $INSTALL_BIN/$(basename "$RUNTIME_SRC")"
+echo "  - $(basename "$CHECKER_SRC"): $INSTALL_BIN/$(basename "$CHECKER_SRC")"
 echo "  - command shim: $HOT_BIN/luks"
 
 if command -v luks >/dev/null 2>&1; then

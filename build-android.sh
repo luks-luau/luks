@@ -8,19 +8,24 @@ echo "Building luks-luau for Android (ARM64)..."
 TARGET_ARCH="aarch64-linux-android"
 
 # Step 1: Build luksruntime
-echo "[1/4] Building luksruntime..."
+echo "[1/5] Building luksruntime..."
 cargo build -p luksruntime --release --target "$TARGET_ARCH"
 
 # Step 2: Runtime naming
-echo "[2/4] Library file ready (libluksruntime.so)"
+echo "[2/5] Library file ready (libluksruntime.so)"
+
+# Step 2.5: Build lukschecker
+echo "[3/5] Building lukschecker..."
+cargo build -p lukschecker --release --target "$TARGET_ARCH"
 
 # Step 3: Build lukscli
-echo "[3/4] Building lukscli..."
+echo "[4/5] Building lukscli..."
 cargo build -p lukscli --release --target "$TARGET_ARCH"
 
 # Step 4: Install binaries and ensure PATH (Termux-friendly)
-echo "[4/4] Installing luks and runtime..."
+echo "[5/5] Installing luks, runtime, and checker..."
 RUNTIME_SRC="target/$TARGET_ARCH/release/libluksruntime.so"
+CHECKER_SRC="target/$TARGET_ARCH/release/liblukschecker.so"
 CLI_SRC="target/$TARGET_ARCH/release/lukscli"
 
 if [ -n "${PREFIX:-}" ]; then
@@ -53,6 +58,7 @@ fi
 
 cp "$CLI_SRC" "$INSTALL_BIN/luks"
 cp "$RUNTIME_SRC" "$INSTALL_BIN/libluksruntime.so"
+cp "$CHECKER_SRC" "$INSTALL_BIN/liblukschecker.so"
 chmod +x "$INSTALL_BIN/luks"
 
 HOT_BIN=""
@@ -116,10 +122,12 @@ echo ""
 echo "Build completed successfully!"
 echo "Output:"
 echo "  - libluksruntime.so: target/$TARGET_ARCH/release/libluksruntime.so"
+echo "  - liblukschecker.so: target/$TARGET_ARCH/release/liblukschecker.so"
 echo "  - lukscli: target/$TARGET_ARCH/release/lukscli"
 echo "Installed:"
 echo "  - luks: $INSTALL_BIN/luks"
 echo "  - libluksruntime.so: $INSTALL_BIN/libluksruntime.so"
+echo "  - liblukschecker.so: $INSTALL_BIN/liblukschecker.so"
 echo "  - command shim: $HOT_BIN/luks"
 
 if command -v luks >/dev/null 2>&1; then

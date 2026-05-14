@@ -36,7 +36,7 @@ else
 
     -- Secure static fallback array ensuring coverage if source reading encounters errors
     if #categories == 0 then
-        categories = { "require", "dlopen", "task", "signal", "json", "http", "websocket", "zlib", "crypto", "process", "filesystem", "stdio" }
+        categories = { "require", "dlopen", "task", "signal", "json", "http", "websocket", "zlib", "crypto", "process", "filesystem", "stdio", "jit" }
     end
 end
 
@@ -72,7 +72,7 @@ for _, category in ipairs(categories) do
     
     local lastSuccessfulTest = nil
     local firstFailedTest = nil
-    local currentTestIndex = 1
+    local activeRunningTest = nil
     local streamBuffer = ""
 
     local function formatShort(tName)
@@ -82,19 +82,11 @@ for _, category in ipairs(categories) do
         return tName
     end
 
-    -- Render clean atomic initial testing state line
-    if #scheduledTests > 0 then
-        if is_ci then
-            out:fmt("[%s] testing: %s\n", category, scheduledTests[1].test:lower()):flush()
-        else
-            out:fmt("\r\27[2K[%s] testing: %s", category, formatShort(scheduledTests[1].test:lower())):flush()
-        end
+    -- Render clean initial state line to mask VM startup silence
+    if is_ci then
+        out:fmt("[%s] running...\n", category):flush()
     else
-        if is_ci then
-            out:fmt("[%s] running...\n", category):flush()
-        else
-            out:fmt("\r\27[2K[%s] running...", category):flush()
-        end
+        out:fmt("\r\27[2K[%s] running...", category):flush()
     end
 
     child.onStdout:Connect(function(chunk)
@@ -109,13 +101,17 @@ for _, category in ipairs(categories) do
             streamBuffer = streamBuffer:sub(newlinePos + 1)
 
             local cleanLine = line:gsub("\27%[%d+m", "")
-            local matchedName, statusStr = cleanLine:match("->%s*(.-)%s*%[([PF][A-Z]+)%]")
+            local matchedName, statusStr = cleanLine:match("->%s*(.-)%s*%[([A-Z]+)%]")
             if matchedName then
                 local cleanName = matchedName:match("^%s*(.-)%s*$")
-                currentTestIndex += 1
 
-                if statusStr == "PASS" then
+                if statusStr == "RUNNING" then
+                    activeRunningTest = cleanName:upper()
+                elseif statusStr == "PASS" then
                     lastSuccessfulTest = cleanName:upper()
+                    if activeRunningTest == cleanName:upper() then
+                        activeRunningTest = nil
+                    end
                     if is_ci then
                         out:fmt("[%s] success: %s\n", category, cleanName:lower()):flush()
                     else
@@ -125,15 +121,14 @@ for _, category in ipairs(categories) do
                     if not firstFailedTest then
                         firstFailedTest = cleanName:upper()
                     end
+                    if activeRunningTest == cleanName:upper() then
+                        activeRunningTest = nil
+                    end
                     if is_ci then
                         out:fmt("[%s] failed: %s\n", category, cleanName:lower()):flush()
                     else
                         out:fmt("\r\27[2K[%s] failed: %s", category, formatShort(cleanName:lower())):flush()
                     end
-                end
-                
-                if not is_ci and currentTestIndex <= #scheduledTests then
-                    out:fmt("\r\27[2K[%s] testing: %s", category, formatShort(scheduledTests[currentTestIndex].test:lower())):flush()
                 end
             end
         end
@@ -163,20 +158,7 @@ for _, category in ipairs(categories) do
         out:color("red"):fmt("[%s] fail (exit status: %d)\n", category, exitCode):color("reset"):flush()
 
         -- Determine the exact target test case responsible for the failure or memory corruption crash
-        local targetCaseName = firstFailedTest
-
-        if not targetCaseName then
-            if lastSuccessfulTest == nil and #scheduledTests > 0 then
-                targetCaseName = scheduledTests[1].test
-            elseif lastSuccessfulTest ~= nil then
-                for idx, item in ipairs(scheduledTests) do
-                    if item.test == lastSuccessfulTest and idx < #scheduledTests then
-                        targetCaseName = scheduledTests[idx + 1].test
-                        break
-                    end
-                end
-            end
-        end
+        local targetCaseName = firstFailedTest or activeRunningTest
 
         if targetCaseName then
             local originFile = "unknown"

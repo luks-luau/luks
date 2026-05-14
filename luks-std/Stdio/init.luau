@@ -265,7 +265,7 @@ function Stdio.stdin(): StdinHandle
                 task.wait()
             end
         end)
-        return sig
+        return (sig :: any)
     end
     function handle:close()
         closed = true

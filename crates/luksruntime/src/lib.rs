@@ -355,7 +355,7 @@ unsafe fn luks_new_impl() -> *mut LuksRuntime {
         return ptr::null_mut();
     }
 
-    let compiler = Compiler::new().set_optimization_level(1).set_debug_level(1);
+    let compiler = Compiler::new().set_optimization_level(2).set_debug_level(2);
     lua.set_compiler(compiler);
 
     Box::into_raw(Box::new(LuksRuntime { lua, scheduler }))
@@ -452,8 +452,46 @@ unsafe fn luks_execute_impl(
         .unwrap_or_else(|| ".".to_string());
     let _ = rt.lua.globals().set("__script_dir__", script_dir.clone());
 
+    // Parse `--!native` and `--!optimize <num>` directives from the top lines.
+    let mut has_native = false;
+    let mut opt_level = None;
+    for line in src.lines().take(10) {
+        let trimmed = line.trim();
+        if trimmed.contains("--!native") {
+            has_native = true;
+        }
+        if let Some(idx) = trimmed.find("--!optimize") {
+            let remainder = &trimmed[idx + "--!optimize".len()..];
+            for c in remainder.chars() {
+                if c.is_ascii_digit() {
+                    if let Ok(val) = c.to_string().parse::<u8>() {
+                        if val <= 2 {
+                            opt_level = Some(val);
+                        }
+                    }
+                    break;
+                }
+            }
+        }
+    }
+
+    // Apply granular JIT and optimization settings.
+    let final_opt = opt_level.unwrap_or(if has_native { 2 } else { 1 });
+    let compiler = Compiler::new().set_optimization_level(final_opt);
+
+    #[cfg(not(any(target_os = "android", all(target_os = "linux", target_arch = "x86"))))]
+    {
+        rt.lua.enable_jit(has_native);
+    }
+
     // Load the chunk and create a thread so it runs inside the scheduler
-    let chunk = match rt.lua.load(src).set_name(name_str).into_function() {
+    let chunk = match rt
+        .lua
+        .load(src)
+        .set_compiler(compiler)
+        .set_name(name_str)
+        .into_function()
+    {
         Ok(f) => f,
         Err(e) => {
             return ffi_utils::ffi_error_msg(format!("compile error: {}", e));

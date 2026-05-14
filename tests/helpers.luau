@@ -38,10 +38,15 @@ local stats = {
 function helpers.format_status(status)
     if status == "PASS" then
         return colors.blue .. "[PASS]" .. colors.reset
+    elseif status == "RUNNING" then
+        return "[RUNNING]"
     else
         return colors.yellow .. "[FAIL]" .. colors.reset
     end
 end
+
+local Stdio = require("../luks-std/Stdio")
+local out = Stdio.stdout()
 
 -- Print test result in required format
 -- Format: CATEGORY -> FUNCTION_NAME [STATUS]
@@ -50,11 +55,14 @@ function helpers.print_result(category, _case_num, test_name, status)
     local colored_status = helpers.format_status(status)
     -- Color the whole line based on status
     if status == "PASS" then
-        print(string.format("%s%s -> %s %s%s",
-            colors.blue, category:upper(), test_name:upper(), colored_status, colors.reset))
+        out:writeLine(string.format("%s%s -> %s %s%s",
+            colors.blue, category:upper(), test_name:upper(), colored_status, colors.reset)):flush()
+    elseif status == "RUNNING" then
+        out:writeLine(string.format("%s -> %s %s",
+            category:upper(), test_name:upper(), colored_status)):flush()
     else
-        print(string.format("%s%s -> %s %s%s",
-            colors.yellow, category:upper(), test_name:upper(), colored_status, colors.reset))
+        out:writeLine(string.format("%s%s -> %s %s%s",
+            colors.yellow, category:upper(), test_name:upper(), colored_status, colors.reset)):flush()
     end
 end
 
@@ -111,6 +119,7 @@ end
 -- Run a test function with tracking
 -- Prints immediately in required format
 function helpers.test(name, fn)
+    helpers.print_result(helpers.current_category, helpers.current_case, name, "RUNNING")
     local success, err = pcall(fn)
     local status = success and "PASS" or "FAIL"
 

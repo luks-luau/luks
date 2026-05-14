@@ -1,4 +1,4 @@
-use mlua::{Function, Lua, NavigateError, Require, Result as LuaResult};
+use mlua::{Compiler, Function, Lua, NavigateError, Require, Result as LuaResult};
 use std::fs::File;
 use std::io::{self, Read};
 use std::path::{Path, PathBuf};
@@ -244,9 +244,41 @@ impl Require for LuksRequirer {
             file.read_to_string(&mut source)
                 .map_err(|e| mlua::Error::runtime(format!("read '{}': {}", path.display(), e)))?;
 
+            // Parse `--!native` and `--!optimize <num>` directives from the module source.
+            let mut has_native = false;
+            let mut opt_level = None;
+            for line in source.lines().take(10) {
+                let trimmed = line.trim();
+                if trimmed.contains("--!native") {
+                    has_native = true;
+                }
+                if let Some(idx) = trimmed.find("--!optimize") {
+                    let remainder = &trimmed[idx + "--!optimize".len()..];
+                    for c in remainder.chars() {
+                        if c.is_ascii_digit() {
+                            if let Ok(val) = c.to_string().parse::<u8>() {
+                                if val <= 2 {
+                                    opt_level = Some(val);
+                                }
+                            }
+                            break;
+                        }
+                    }
+                }
+            }
+
+            let final_opt = opt_level.unwrap_or(if has_native { 2 } else { 1 });
+            let compiler = Compiler::new().set_optimization_level(final_opt);
+
+            #[cfg(not(any(target_os = "android", all(target_os = "linux", target_arch = "x86"))))]
+            {
+                lua.enable_jit(has_native);
+            }
+
             // Compile and return the function.
             // mlua/Luau manages module cache and execution environment.
             lua.load(&source)
+                .set_compiler(compiler)
                 .set_name(path.to_string_lossy())
                 .into_function()
         }))
