@@ -1,6 +1,15 @@
+use std::collections::HashMap;
 use std::ffi::CStr;
+use std::hash::{Hash, Hasher};
 use std::os::raw::c_char;
 use std::path::{Path, PathBuf};
+
+fn hash_str(s: &str) -> u64 {
+    use std::collections::hash_map::DefaultHasher;
+    let mut hasher = DefaultHasher::new();
+    s.hash(&mut hasher);
+    hasher.finish()
+}
 
 /// Entrypoint for checking scripts path via native static analysis.
 ///
@@ -14,7 +23,7 @@ pub unsafe extern "C-unwind" fn luks_checker_check_path(path_ptr: *const c_char)
         match CStr::from_ptr(path_ptr).to_str() {
             Ok(s) => PathBuf::from(s),
             Err(_) => {
-                println!("\x1b[1;31merror\x1b[0m: Invalid UTF-8 path provided.");
+                println!("\x1b[1;91merror\x1b[0m: Invalid UTF-8 path provided.");
                 return -1;
             }
         }
@@ -30,6 +39,30 @@ pub unsafe extern "C-unwind" fn luks_checker_check_path(path_ptr: *const c_char)
 
     if files.is_empty() {
         return 0;
+    }
+
+    let start_time = std::time::Instant::now();
+
+    let cache_path = std::env::temp_dir().join("luks_luau_checker.cache");
+    let mut cache: HashMap<String, (u64, Vec<(String, u64)>)> = HashMap::new();
+    if let Ok(content) = std::fs::read_to_string(&cache_path) {
+        for line in content.lines() {
+            let parts: Vec<&str> = line.split("::").collect();
+            if parts.len() >= 2 {
+                let target = parts[0].to_string();
+                if let Ok(target_hash) = parts[1].parse::<u64>() {
+                    let mut deps = Vec::new();
+                    let mut i = 2;
+                    while i + 1 < parts.len() {
+                        if let Ok(h) = parts[i + 1].parse::<u64>() {
+                            deps.push((parts[i].to_string(), h));
+                        }
+                        i += 2;
+                    }
+                    cache.insert(target, (target_hash, deps));
+                }
+            }
+        }
     }
 
     let mut analyzer = luau_analyzer_sys::NativeAnalyzer::new();
@@ -74,9 +107,58 @@ declare table: {
     let mut total_warnings = 0;
 
     for file in &files {
+        let canon_file = std::fs::canonicalize(file).unwrap_or_else(|_| file.clone());
+        let file_cache_key = canon_file.to_string_lossy().to_string();
+
         let file_str = file.to_string_lossy().to_string();
         if let Ok(source) = std::fs::read_to_string(file) {
+            let current_hash = hash_str(&source);
+
+            let mut is_cached_and_valid = false;
+            if let Some((cached_target_hash, deps)) = cache.get(&file_cache_key) {
+                if cached_target_hash == &current_hash {
+                    let mut all_deps_valid = true;
+                    for (d_path, d_cached_hash) in deps {
+                        if let Ok(d_content) = std::fs::read_to_string(d_path) {
+                            if hash_str(&d_content) != *d_cached_hash {
+                                all_deps_valid = false;
+                                break;
+                            }
+                        } else {
+                            all_deps_valid = false;
+                            break;
+                        }
+                    }
+                    if all_deps_valid {
+                        is_cached_and_valid = true;
+                    }
+                }
+            }
+
+            if is_cached_and_valid {
+                continue;
+            }
+
+            let filename = file.file_name().and_then(|s| s.to_str()).unwrap_or("");
+            let module_name = if filename == "init.luau" || filename == "init.lua" {
+                file.parent()
+                    .and_then(|p| p.file_name())
+                    .and_then(|s| s.to_str())
+                    .unwrap_or("workspace")
+            } else {
+                file.file_stem()
+                    .and_then(|s| s.to_str())
+                    .unwrap_or(filename)
+            };
+
+            println!(
+                "    \x1b[1;92mChecking\x1b[0m {} ({})",
+                module_name,
+                file.display()
+            );
+
             let lines: Vec<&str> = source.lines().collect();
+            let accessed_deps = std::cell::RefCell::new(Vec::new());
 
             // Native checking closure resolving required file dependencies recursively from disk
             let diags = analyzer.check(&file_str, |req_name| {
@@ -106,19 +188,28 @@ declare table: {
                 }
 
                 if let Some(tf) = target_file {
-                    std::fs::read_to_string(tf).ok()
-                } else {
-                    None
+                    if let Ok(content) = std::fs::read_to_string(&tf) {
+                        let tf_canon = std::fs::canonicalize(&tf).unwrap_or(tf);
+                        let tf_str = tf_canon.to_string_lossy().to_string();
+                        let mut borrow = accessed_deps.borrow_mut();
+                        if !borrow.iter().any(|(p, _)| p == &tf_str) {
+                            borrow.push((tf_str, hash_str(&content)));
+                        }
+                        return Some(content);
+                    }
                 }
+                None
             });
+
+            let had_diags = !diags.is_empty();
 
             for diag in diags {
                 let severity_str = if diag.severity == 0 {
                     total_errors += 1;
-                    "\x1b[1;31merror\x1b[0m"
+                    "\x1b[1;91merror\x1b[0m"
                 } else {
                     total_warnings += 1;
-                    "\x1b[1;33mwarning\x1b[0m"
+                    "\x1b[1;93mwarning\x1b[0m"
                 };
 
                 println!("{}: {}", severity_str, diag.message);
@@ -146,9 +237,9 @@ declare table: {
                 let carets = "^".repeat(caret_len);
 
                 let carets_colored = if diag.severity == 0 {
-                    format!("\x1b[1;31m{}\x1b[0m", carets)
+                    format!("\x1b[1;91m{}\x1b[0m", carets)
                 } else {
-                    format!("\x1b[1;33m{}\x1b[0m", carets)
+                    format!("\x1b[1;93m{}\x1b[0m", carets)
                 };
 
                 println!(
@@ -157,8 +248,34 @@ declare table: {
                 );
                 println!();
             }
+
+            if !had_diags {
+                cache.insert(file_cache_key, (current_hash, accessed_deps.into_inner()));
+            } else {
+                cache.remove(&file_cache_key);
+            }
         }
     }
+
+    let mut cache_out = String::new();
+    for (target, (target_hash, deps)) in &cache {
+        cache_out.push_str(target);
+        cache_out.push_str("::");
+        cache_out.push_str(&target_hash.to_string());
+        for (d_path, d_hash) in deps {
+            cache_out.push_str("::");
+            cache_out.push_str(d_path);
+            cache_out.push_str("::");
+            cache_out.push_str(&d_hash.to_string());
+        }
+        cache_out.push('\n');
+    }
+    std::fs::write(&cache_path, cache_out).ok();
+
+    println!(
+        "    \x1b[1;92mFinished\x1b[0m static analysis target(s) in {:.2}s",
+        start_time.elapsed().as_secs_f64()
+    );
 
     let target_disp = if target_path.to_string_lossy() == "." {
         "workspace"
@@ -179,25 +296,25 @@ declare table: {
     if total_errors > 0 {
         if total_warnings > 0 {
             println!(
-                "\x1b[1;31merror\x1b[0m: could not compile `{}` due to {} previous {}; {} {} emitted",
+                "\x1b[1;91merror\x1b[0m: could not compile `{}` due to {} previous {}; {} {} emitted",
                 target_disp, total_errors, err_word, total_warnings, warn_word
             );
         } else {
             println!(
-                "\x1b[1;31merror\x1b[0m: could not compile `{}` due to {} previous {}",
+                "\x1b[1;91merror\x1b[0m: could not compile `{}` due to {} previous {}",
                 target_disp, total_errors, err_word
             );
         }
         1
     } else if total_warnings > 0 {
         println!(
-            "\x1b[1;33mwarning\x1b[0m: `{}` checked successfully; {} {} emitted",
+            "\x1b[1;93mwarning\x1b[0m: `{}` checked successfully; {} {} emitted",
             target_disp, total_warnings, warn_word
         );
         0
     } else {
         println!(
-            "\x1b[1;32msuccess\x1b[0m: `{}` checked successfully",
+            "\x1b[1;92msuccess\x1b[0m: `{}` checked successfully",
             target_disp
         );
         0
