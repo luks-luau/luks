@@ -47,7 +47,7 @@ end
     @param optionsOrContent Text string content or structured parameter block payload
     @return Success condition alongside the compiled response message table or execution error
 ]]
-function ChannelMT:send(optionsOrContent: any): (boolean, any)
+function ChannelMT.send(self: Channel, optionsOrContent: any): (boolean, any)
     if not self._rest then
         return false, "REST client interface missing on Channel object."
     end

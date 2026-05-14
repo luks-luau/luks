@@ -53,7 +53,7 @@ end
     Generates the standard structural mention string mapping directly to this user ID.
     @return Direct platform-compliant formatted mention string (<@id>)
 ]]
-function UserMT:mention(): string
+function UserMT.mention(self: User): string
     return "<@" .. self.id .. ">"
 end
 
@@ -63,7 +63,7 @@ end
     @param size Pixel dimension limit rendering bound
     @return Full absolute resource web URL string
 ]]
-function UserMT:avatarUrl(format: string?, size: number?): string
+function UserMT.avatarUrl(self: User, format: string?, size: number?): string
     local fmt = format or (self.avatar and string.find(self.avatar, "^a_") and "gif" or "png")
     local sz = size or 1024
     if self.avatar then

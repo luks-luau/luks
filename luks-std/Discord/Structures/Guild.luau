@@ -83,18 +83,19 @@ end
     @param size Pixel dimension bound limit
     @return Full CDN resource path string if present
 ]]
-function GuildMT:iconUrl(format: string?, size: number?): string?
+function GuildMT.iconUrl(self: Guild, format: string?, size: number?): string?
     if not self.icon then return nil end
-    local fmt = format or (string.find(self.icon, "^a_") and "gif" or "png")
+    local iconStr = self.icon :: string
+    local fmt = format or (string.find(iconStr, "^a_") and "gif" or "png")
     local sz = size or 1024
-    return "https://cdn.discordapp.com/icons/" .. self.id .. "/" .. self.icon .. "." .. fmt .. "?size=" .. tostring(sz)
+    return "https://cdn.discordapp.com/icons/" .. self.id .. "/" .. iconStr .. "." .. fmt .. "?size=" .. tostring(sz)
 end
 
 --[[
     Triggers bot withdrawal/departure from this guild entity scope.
     @return Success state boolean condition alongside optional failure error description
 ]]
-function GuildMT:leave(): (boolean, string?)
+function GuildMT.leave(self: Guild): (boolean, string?)
     if not self._rest then
         return false, "REST client reference unavailable on this Guild structure."
     end
@@ -112,7 +113,7 @@ end
     @param options Query parameter configuration dict filtering records
     @return Success condition alongside decoded array tables or failure descriptors
 ]]
-function GuildMT:fetchAuditLogs(options: { limit: number?, action_type: number?, user_id: string?, before: string? }?): (boolean, any)
+function GuildMT.fetchAuditLogs(self: Guild, options: { limit: number?, action_type: number?, user_id: string?, before: string? }?): (boolean, any)
     if not self._rest then return false, "REST client reference unavailable." end
     local endpoint = "/guilds/" .. self.id .. "/audit-logs"
     local query = {}
@@ -132,7 +133,7 @@ end
     Enumerates all active server invites assigned to this guild.
     @return Success condition alongside decoded invite payload mappings
 ]]
-function GuildMT:fetchInvites(): (boolean, any)
+function GuildMT.fetchInvites(self: Guild): (boolean, any)
     if not self._rest then return false, "REST client reference unavailable." end
     return self._rest:get("/guilds/" .. self.id .. "/invites")
 end

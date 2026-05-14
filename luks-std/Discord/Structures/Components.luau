@@ -398,7 +398,7 @@ function ActionRowMT:toJSON(): { [string]: any }
     local serialized = {}
     for _, comp in ipairs(self._components) do
         if type(comp) == "table" and type(comp.toJSON) == "function" then
-            table.insert(serialized, comp:toJSON())
+            table.insert(serialized, (comp:toJSON()))
         else
             table.insert(serialized, comp)
         end
@@ -700,7 +700,7 @@ function ModalMT:toJSON(): { [string]: any }
     local serializedComponents = {}
     for _, comp in ipairs(self._components) do
         if type(comp) == "table" and type(comp.toJSON) == "function" then
-            table.insert(serializedComponents, comp:toJSON())
+            table.insert(serializedComponents, (comp:toJSON()))
         else
             table.insert(serializedComponents, comp)
         end

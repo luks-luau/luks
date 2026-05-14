@@ -109,7 +109,7 @@ function RestMT:request(method: string, path: string, options: { body: any?, hea
         url = Data.Constants.BaseUrl .. (string.sub(path, 1, 1) == "/" and "" or "/") .. path
     end
 
-    local opts = options or {}
+    local opts = (options or {}) :: { body: any?, headers: { [string]: string }? }
     local reqHeaders = {
         ["Authorization"] = "Bot " .. token,
         ["User-Agent"] = "DiscordBot (https://github.com/luks-luau/luks, 1.0.0)",
