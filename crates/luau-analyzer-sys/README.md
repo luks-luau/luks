@@ -15,6 +15,7 @@ High-level ergonomic Rust bindings and low-level C++ FFI bindings for the native
 - **Custom Definitions**: Inject global environment mapping definitions dynamically via Luau `.d.luau` files.
 - **Dependency Resolution**: Fully recursive module path resolution via safe Rust closures.
 - **Granular Diagnostics**: Capture detailed warnings, errors, and lint output complete with source span offsets.
+- **Deprecation Linting**: Native static interception of deprecated functions (e.g. `getfenv`) mapped via dynamic line deduplication.
 
 ## Usage
 
