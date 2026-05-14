@@ -12,6 +12,7 @@ members = [
     "luks-std/ZLib",
     "luks-std/Crypto",
     "luks-std/FileSystem",
+    "luks-std/Stdio",
     "crates/luks-module-sys"
 ]
 resolver = "2"
