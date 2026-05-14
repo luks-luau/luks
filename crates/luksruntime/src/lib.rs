@@ -43,28 +43,11 @@ unsafe fn get_script_dir(l: *mut ffi::lua_State) -> Option<std::path::PathBuf> {
 }
 
 fn extract_source_path(src: &str) -> Option<String> {
-    if let Some(rest) = src.strip_prefix('@') {
-        return Some(rest.to_string());
+    let s = path_resolution::clean_source_name(src);
+    let p = std::path::Path::new(s);
+    if p.is_absolute() || s.ends_with(".luau") || s.ends_with(".lua") {
+        return Some(s.to_string());
     }
-
-    if let Some(inner) = src
-        .strip_prefix("[string \"")
-        .and_then(|s| s.strip_suffix("\"]"))
-    {
-        if let Some(rest) = inner.strip_prefix('@') {
-            return Some(rest.to_string());
-        }
-        let p = std::path::Path::new(inner);
-        if p.is_absolute() {
-            return Some(inner.to_string());
-        }
-    }
-
-    let p = std::path::Path::new(src);
-    if p.is_absolute() {
-        return Some(src.to_string());
-    }
-
     None
 }
 
@@ -319,6 +302,19 @@ unsafe fn luks_new_impl() -> *mut LuksRuntime {
     // This preserves compatibility with code calling `require("module")`.
     let require_wrapper =
         lua.create_function(move |_lua, module: String| -> mlua::Result<mlua::Value> {
+            if module == "@self" || module.starts_with("@self/") || module.starts_with("@self\\") {
+                let mut caller_dir = None;
+                unsafe {
+                    let _: mlua::Result<()> = _lua.exec_raw((), |state| {
+                        caller_dir = get_caller_script_dir(state).or_else(|| get_script_dir(state));
+                    });
+                }
+                let base_dir = caller_dir.unwrap_or_else(|| std::path::PathBuf::from("."));
+                let resolved = path_resolution::resolve_from_base(&base_dir, &module);
+                let resolved_str = path_resolution::make_relative_path(&base_dir, &resolved);
+                return luau_require_fn.call::<mlua::Value>(resolved_str);
+            }
+
             let adjusted_path =
                 if module.starts_with("./") || module.starts_with("../") || module.starts_with("@")
                 {
