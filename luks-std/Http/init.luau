@@ -7,7 +7,7 @@
 
     Sync methods block the current thread and return an `HttpResponse` directly.
     Async methods (`*Async`) return a `Signal<HttpResponse>` that fires once the
-    response arrives, running the request inside `task.spawn`.
+    response arrives, running the request inside `task.defer`.
 ]]
 
 local Signal = require("@self/../Signal")
@@ -192,7 +192,7 @@ local function createAsyncWrapper(syncFn: (...any) -> HttpResponse): (...any) ->
     return function(...: any): AsyncHttpResponse
         local args = { ... }
         local signal = Signal.new() :: Signal.SignalInternal<HttpResponse>
-        task.spawn(function()
+        task.defer(function()
             local response = syncFn(table.unpack(args))
             signal:Fire(response)
         end)
