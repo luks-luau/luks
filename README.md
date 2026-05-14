@@ -133,6 +133,7 @@ The workspace hosts a collection of highly-optimized native extensions implement
 - **[`Json`](https://github.com/luks-luau/luks/blob/main/luks-std/Json/README.md)**: Direct, ultra-fast structural encoding and decoding mapping directly to dynamic Lua values.
 - **[`ZLib`](https://github.com/luks-luau/luks/blob/main/luks-std/ZLib/README.md)**: Native payload compression and decompression utilities.
 - **[`Crypto`](https://github.com/luks-luau/luks/blob/main/luks-std/Crypto/README.md)**: Secure hash algorithms and CSPRNG random generators.
+- **[`FileSystem`](https://github.com/luks-luau/luks/blob/main/luks-std/FileSystem/README.md)**: Native filesystem operations with async support.
 - **[`Discord`](https://github.com/luks-luau/luks/blob/main/luks-std/Discord/README.md)**: Native API wrapper and real-time gateway integrations for rich application development.
 - **[`std-template`](https://github.com/luks-luau/luks/blob/main/luks-std/std-template/README.md)**: Centralized boilerplate skeleton to guide contributors in crafting reliable and secure Luau FFI submodules.
 
