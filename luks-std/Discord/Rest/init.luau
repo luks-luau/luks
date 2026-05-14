@@ -1,4 +1,6 @@
 --!strict
+--!native
+--!optimize 2
 
 --[[
     Rest Layer — Internal HTTP API Dispatcher for luks-std/Discord.

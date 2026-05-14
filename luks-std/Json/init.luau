@@ -1,4 +1,6 @@
 --!strict
+--!native
+--!optimize 2
 
 --[[
     Json Module — Native JSON encode/decode for Luau.

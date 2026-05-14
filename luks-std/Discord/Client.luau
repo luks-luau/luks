@@ -1,4 +1,6 @@
 --!strict
+--!native
+--!optimize 2
 
 --[[
     Client Namespace — Base Object-Oriented Application orchestrator for luks-std/Discord.

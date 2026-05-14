@@ -1,3 +1,8 @@
+--!strict
+--!native
+--!optimize 2
+
+
 local SafeLoadNative = function(path: string)
     local sucess, native = pcall(dlopen, path)
     if sucess then

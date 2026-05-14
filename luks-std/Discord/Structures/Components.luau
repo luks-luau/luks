@@ -1,4 +1,6 @@
 --!strict
+--!native
+--!optimize 2
 
 --[[
     Components Builders — OOP chainable component schemas for building complex Discord UIs.

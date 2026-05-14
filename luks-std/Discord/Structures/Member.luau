@@ -1,4 +1,6 @@
 --!strict
+--!native
+--!optimize 2
 
 --[[
     Member Structure — OOP Wrapper modeling guild-specific member entities.

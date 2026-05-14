@@ -1,4 +1,6 @@
 --!strict
+--!native
+--!optimize 2
 
 --[[
     Interaction Structure — OOP Wrapper for managing incoming Application Commands, Buttons, and Modal interactions.

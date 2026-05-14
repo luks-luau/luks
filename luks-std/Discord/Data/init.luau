@@ -1,4 +1,6 @@
 --!strict
+--!native
+--!optimize 2
 
 --[[
     Data Namespace — Mappings, Gateway Opcodes, and Bitwise Intents registry

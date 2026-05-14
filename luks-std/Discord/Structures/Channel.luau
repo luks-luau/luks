@@ -1,4 +1,6 @@
 --!strict
+--!native
+--!optimize 2
 
 --[[
     Channel Structure — OOP Wrapper modeling Discord text, voice, and category channels.

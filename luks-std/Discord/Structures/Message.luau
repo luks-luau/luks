@@ -1,4 +1,6 @@
 --!strict
+--!native
+--!optimize 2
 
 --[[
     Message Structure — OOP Wrapper modeling text messages sent across guild and DM channels.

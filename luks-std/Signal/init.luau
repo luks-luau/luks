@@ -1,4 +1,6 @@
 --!strict
+--!native
+--!optimize 2
 
 --[[
     Signal Module - A type-safe implementation of the observer pattern.

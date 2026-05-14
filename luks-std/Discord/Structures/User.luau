@@ -1,4 +1,6 @@
 --!strict
+--!native
+--!optimize 2
 
 --[[
     User Structure — OOP Wrapper framework modeling global Discord User entities.

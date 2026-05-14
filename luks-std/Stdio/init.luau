@@ -1,4 +1,6 @@
 --!strict
+--!native
+--!optimize 2
 
 --[[
     Stdio Module — Advanced standard input, output, and error streaming interface.

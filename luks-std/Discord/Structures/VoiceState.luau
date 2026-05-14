@@ -1,4 +1,6 @@
 --!strict
+--!native
+--!optimize 2
 
 --[[
     VoiceState Structure — OOP Wrapper modeling active channel connectivity state presences.

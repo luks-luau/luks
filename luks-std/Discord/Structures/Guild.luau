@@ -1,4 +1,6 @@
 --!strict
+--!native
+--!optimize 2
 
 --[[
     Guild Structure — OOP Wrapper modeling Discord Guild (Server) entities.

@@ -1,4 +1,6 @@
 --!strict
+--!native
+--!optimize 2
 
 --[[
     Gateway Layer — Stateful WebSocket connection engine for luks-std/Discord.

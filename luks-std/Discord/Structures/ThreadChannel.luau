@@ -1,4 +1,6 @@
 --!strict
+--!native
+--!optimize 2
 
 --[[
     ThreadChannel Structure — OOP representation modeling nested forum discussion threads or sub-channels.

@@ -1,4 +1,6 @@
 --!strict
+--!native
+--!optimize 2
 
 --[[
     Embed Builder — Fluent Enterprise standardization layout for composing rich message Embeds.

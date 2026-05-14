@@ -1,4 +1,6 @@
 --!strict
+--!native
+--!optimize 2
 
 --[[
     Process Module — Advanced Native Subprocess and Host Management Interface.
