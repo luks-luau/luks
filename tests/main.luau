@@ -17,7 +17,7 @@ local expect = {
 }
 
 -- Auto-discovered test categories.
-local categories = args[1] ~= nil and args or { "require", "dlopen", "task", "signal", "json", "http", "websocket", "zlib", "crypto", "process" }
+local categories = args[1] ~= nil and args or { "require", "dlopen", "task", "signal", "json", "http", "websocket", "zlib", "crypto", "process", "filesystem" }
 local test_cases = {}
 
 -- Cache for loaded test cases
