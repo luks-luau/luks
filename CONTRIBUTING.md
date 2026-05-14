@@ -82,7 +82,12 @@ git checkout -b fix/your-bug-fix
 # Run Rust tests
 cargo test
 
-# Run Luau test suite
+# Run Luau test suite via minimalist real-time UI runner (recommended)
+luks ExecuteTests.luau
+# or run selective categories
+luks ExecuteTests.luau stdio zlib
+
+# Alternatively, evaluate raw verbose script outputs directly
 .\target\release\lukscli.exe .\tests\main.luau
 # or on Unix
 ./target/release/lukscli ./tests/main.luau
@@ -201,7 +206,8 @@ The project uses a custom Luau test framework located in `tests/`:
 
 The test suite uses a modular framework with auto-discovery:
 
-- **Test Runner**: `main.luau` automatically discovers and executes test cases
+- **Real-Time UI Runner (`ExecuteTests.luau`)**: Minimalist event-driven test runner with live single-line dynamic updates, dual-status stream capturing (`[PASS]` and `[FAIL]`), and advanced diagnostic mapping capable of intercepting native C-FFI **Segmentation Faults (SegFaults) and core memory crashes**, isolating the exact guilty file instantly.
+- **Raw Test Runner (`main.luau`)**: Core engine discovering and executing full test suites sequentially.
 - **Helpers**: `helpers.luau` provides assertion functions (`expect_eq`, `expect_true`, etc.)
 - **Categories**: Tests are organized by category (e.g., `require/cases/`, `dlopen/cases/`, `task/cases/`)
 - **Naming**: Test files follow sequential numbering: `cases/#1.luau`, `cases/#2.luau`, etc.
@@ -212,12 +218,17 @@ The test suite uses a modular framework with auto-discovery:
 # Build the CLI first
 cargo build --release
 
-# Run the complete test suite
+# Run the complete test suite via minimalist real-time UI runner (recommended)
+luks ExecuteTests.luau
+# or run selective categories
+luks ExecuteTests.luau zlib process signal
+
+# Alternatively, evaluate raw verbose script outputs directly
 .\target\release\lukscli.exe .\tests\main.luau
 # or on Unix
 ./target/release/lukscli ./tests/main.luau
 
-# Run isolated test suites by providing category trailing arguments
+# Run raw isolated test suites by providing category trailing arguments
 .\target\release\lukscli.exe .\tests\main.luau zlib process signal
 # or using target/debug if developing
 ./target/debug/lukscli tests/main.luau zlib process signal
