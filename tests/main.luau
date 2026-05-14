@@ -17,7 +17,7 @@ local expect = {
 }
 
 -- Auto-discovered test categories.
-local categories = args[1] ~= nil and args or { "require", "dlopen", "task", "signal", "json", "http", "websocket", "zlib", "crypto", "process", "filesystem" }
+local categories = args[1] ~= nil and args or { "require", "dlopen", "task", "signal", "json", "http", "websocket", "zlib", "crypto", "process", "filesystem", "stdio" }
 local test_cases = {}
 
 -- Cache for loaded test cases
@@ -105,9 +105,11 @@ end
 
 h.print_final_summary(total_stats.total, total_stats.passed, total_stats.failed)
 
+local Process = require("../luks-std/Process")
 if not all_passed then
-    local Process = require("../luks-std/Process")
     Process.exit(1)
+else
+    Process.exit(0)
 end
 
 return all_passed
