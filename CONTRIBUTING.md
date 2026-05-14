@@ -96,11 +96,14 @@ luks ExecuteTests.luau stdio zlib
 ### 4. Format and Lint
 
 ```bash
-# Format code
+# Format Rust code
 cargo fmt
 
-# Run linter
+# Run Rust linter
 cargo clippy -- -D warnings
+
+# Run Luau static analysis and lint checks
+luks check
 ```
 
 ### 5. Commit Your Changes
@@ -155,8 +158,11 @@ luks-luau consists of several key components:
   - Includes async task scheduling via `mlua-luau-scheduler`.
 
 - **lukscli**: Command-line interface for the runtime.
-  - Script execution (`run` command), one-shot evaluation (`eval`), and interactive REPL.
+  - Script execution (`run` command), one-shot evaluation (`eval`), interactive REPL, and static checking (`check` command).
   - Permission flags (`--no-read`, `--no-native`, `--no-import`, `--strict`).
+
+- **lukschecker** / **luau-analyzer-sys**: Static analysis engine and native C++ bindings.
+  - Validates global codebases, typing definitions, and checks for deprecated API usage.
 
 - **mlua-luau-scheduler**: Async scheduler crate for Luau, using mlua.
   - Provides `Scheduler`, `Functions`, and traits for async task scheduling.
@@ -179,7 +185,12 @@ luks-luau consists of several key components:
   - Script execution (`run` command)
   - One-shot evaluation (`eval` command)
   - Interactive REPL
+  - Static code checking (`check` command)
   - Permission flags (`--no-read`, `--no-native`, `--no-import`, `--strict`)
+
+- **lukschecker**: Native static type checker and linter engine
+  - Analyzes global definitions and module boundaries
+  - Detects usage of deprecated APIs
 
 ## Testing
 
@@ -232,6 +243,9 @@ luks ExecuteTests.luau zlib process signal
 .\target\release\lukscli.exe .\tests\main.luau zlib process signal
 # or using target/debug if developing
 ./target/debug/lukscli tests/main.luau zlib process signal
+
+# Perform incremental static analysis on the standard library
+.\target\release\lukscli.exe check luks-std
 ```
 
 #### Adding New Tests

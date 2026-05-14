@@ -1,4 +1,6 @@
 --!strict
+--!native
+--!optimize 2
 
 --[[
     Stdio Module — Advanced standard input, output, and error streaming interface.
@@ -265,7 +267,7 @@ function Stdio.stdin(): StdinHandle
                 task.wait()
             end
         end)
-        return sig
+        return (sig :: any)
     end
     function handle:close()
         closed = true

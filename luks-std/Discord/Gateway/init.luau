@@ -1,4 +1,6 @@
 --!strict
+--!native
+--!optimize 2
 
 --[[
     Gateway Layer — Stateful WebSocket connection engine for luks-std/Discord.
@@ -93,8 +95,9 @@ function GatewayMT:_cleanup()
     end
     table.clear(self._activeSignals)
 
-    if self._conn then
-        pcall(function() self._conn:close() end)
+    local conn = self._conn
+    if conn then
+        pcall(function() (conn :: any):close() end)
         self._conn = nil
     end
 
@@ -182,7 +185,7 @@ function GatewayMT:connect()
                     continue
                 end
 
-                local gatewayUrl = data.url .. Data.Constants.GatewayParams
+                local gatewayUrl = tostring(data.url) .. Data.Constants.GatewayParams
                 local connOk, conn = pcall(WebSocket.connect, gatewayUrl)
                 if not connOk or not conn then
                     task.wait(5)

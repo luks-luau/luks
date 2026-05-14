@@ -1,4 +1,4 @@
-use mlua::{Function, Lua, NavigateError, Require, Result as LuaResult};
+use mlua::{Compiler, Function, Lua, NavigateError, Require, Result as LuaResult};
 use std::fs::File;
 use std::io::{self, Read};
 use std::path::{Path, PathBuf};
@@ -46,44 +46,42 @@ impl LuksRequirer {
     fn find_module(&self) -> Option<PathBuf> {
         let base = &self.current_path;
 
-        // Try as a file with `.luau` or `.lua` extension.
-        for ext in ["luau", "lua"] {
-            let with_ext = base.with_extension(ext);
-            if with_ext.is_file() {
-                return Some(with_ext);
-            }
+        if let Some(found) = crate::path_resolution::find_candidate_file(base) {
+            return Some(found);
         }
 
         if !self.require_paths.is_empty() {
             if let Ok(rel) = base.strip_prefix(&self.script_dir) {
                 for root in &self.require_paths {
-                    for ext in ["luau", "lua"] {
-                        let with_ext = root.join(rel).with_extension(ext);
-                        if with_ext.is_file() {
-                            return Some(with_ext);
-                        }
+                    if let Some(found) =
+                        crate::path_resolution::find_candidate_file(&root.join(rel))
+                    {
+                        return Some(found);
                     }
                 }
             }
         }
 
-        // Try `init.luau` or `init.lua` inside the directory.
-        for ext in ["luau", "lua"] {
-            let init = base.join(format!("init.{}", ext));
-            if init.is_file() {
-                return Some(init);
+        // Universal fallback: find longest common ancestor between script_dir and base
+        // to extract the cleanly requested suffix, then search upwards across ancestor directories.
+        let mut suffix = None;
+        for anc in base.ancestors() {
+            if self.script_dir.starts_with(anc) {
+                if let Ok(s) = base.strip_prefix(anc) {
+                    if !s.as_os_str().is_empty() {
+                        suffix = Some(s);
+                        break;
+                    }
+                }
             }
         }
 
-        if !self.require_paths.is_empty() {
-            if let Ok(rel) = base.strip_prefix(&self.script_dir) {
-                for root in &self.require_paths {
-                    for ext in ["luau", "lua"] {
-                        let init = root.join(rel).join(format!("init.{}", ext));
-                        if init.is_file() {
-                            return Some(init);
-                        }
-                    }
+        if let Some(rel_suffix) = suffix {
+            for anc in self.script_dir.ancestors() {
+                if let Some(found) =
+                    crate::path_resolution::find_candidate_file(&anc.join(rel_suffix))
+                {
+                    return Some(found);
                 }
             }
         }
@@ -127,44 +125,19 @@ impl Require for LuksRequirer {
 
     /// Resets state to the directory of the chunk performing `require`.
     fn reset(&mut self, chunk_name: &str) -> StdResult<(), NavigateError> {
-        let chunk_name = chunk_name.strip_prefix('@').unwrap_or(chunk_name);
+        let clean_name = crate::path_resolution::clean_source_name(chunk_name);
+        let path = Path::new(clean_name);
 
-        let path = Path::new(chunk_name);
+        let script_dir = path
+            .parent()
+            .map(|p| p.to_path_buf())
+            .unwrap_or_else(|| PathBuf::from("."));
+        let script_dir_abs = std::path::absolute(&script_dir).unwrap_or(script_dir);
 
-        // For init.luau/init.lua, @self refers to the module folder (where init file is).
-        // This allows require("@self/sub") to work for submodules.
-        // For example, for "modulo/sub/init.luau", @self = "modulo/sub/".
-        //
-        // The script_dir (used for bare name resolution) is set to the parent of the
-        // module folder, so that require("sibling") finds sibling modules.
-        let filename = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
-        if filename == "init.luau" || filename == "init.lua" {
-            // Module folder is the parent directory (e.g., "modulo/sub" for "modulo/sub/init.luau")
-            let module_folder = path
-                .parent()
-                .map(|p| p.to_path_buf())
-                .unwrap_or_else(|| PathBuf::from("."));
-            // Make module_folder absolute for correct navigation
-            let module_folder_abs =
-                std::path::absolute(&module_folder).unwrap_or(module_folder.clone());
-            // @self = module folder
-            self.module_folder = Some(module_folder_abs.clone());
-            // script_dir = parent of module folder (for bare name resolution)
-            self.script_dir = module_folder_abs
-                .parent()
-                .map(|p| p.to_path_buf())
-                .unwrap_or(module_folder_abs.clone());
-            // current_path is the module folder for navigation
-            self.current_path = module_folder_abs;
-        } else {
-            // For regular files, reset module_folder and use file's directory
-            self.module_folder = None;
-            self.current_path = PathBuf::from(chunk_name);
-            self.script_dir = path
-                .parent()
-                .map(|p| p.to_path_buf())
-                .unwrap_or_else(|| PathBuf::from("."));
-        }
+        // O @self sempre se refere à pasta onde o script está localizado
+        self.module_folder = Some(script_dir_abs.clone());
+        self.script_dir = script_dir_abs.clone();
+        self.current_path = PathBuf::from(clean_name);
 
         Ok(())
     }
@@ -244,9 +217,41 @@ impl Require for LuksRequirer {
             file.read_to_string(&mut source)
                 .map_err(|e| mlua::Error::runtime(format!("read '{}': {}", path.display(), e)))?;
 
+            // Parse `--!native` and `--!optimize <num>` directives from the module source.
+            let mut has_native = false;
+            let mut opt_level = None;
+            for line in source.lines().take(10) {
+                let trimmed = line.trim();
+                if trimmed.contains("--!native") {
+                    has_native = true;
+                }
+                if let Some(idx) = trimmed.find("--!optimize") {
+                    let remainder = &trimmed[idx + "--!optimize".len()..];
+                    for c in remainder.chars() {
+                        if c.is_ascii_digit() {
+                            if let Ok(val) = c.to_string().parse::<u8>() {
+                                if val <= 2 {
+                                    opt_level = Some(val);
+                                }
+                            }
+                            break;
+                        }
+                    }
+                }
+            }
+
+            let final_opt = opt_level.unwrap_or(if has_native { 2 } else { 1 });
+            let compiler = Compiler::new().set_optimization_level(final_opt);
+
+            #[cfg(not(any(target_os = "android", all(target_os = "linux", target_arch = "x86"))))]
+            {
+                lua.enable_jit(has_native);
+            }
+
             // Compile and return the function.
             // mlua/Luau manages module cache and execution environment.
             lua.load(&source)
+                .set_compiler(compiler)
                 .set_name(path.to_string_lossy())
                 .into_function()
         }))

@@ -19,7 +19,7 @@ print(string.format("Teste Sincrono: %d chamadas concluidas em %.4f segundos", s
 -- 2. Teste Assincrono (Scheduler Stress)
 print("Iniciando Teste Assincrono com task.spawn (300 tasks x 1000 chamadas)...")
 local async_success = 0
-local expected_async = 300 * 1000
+local _expected_async = 300 * 1000
 
 for i = 1, 300 do
     task.spawn(function()

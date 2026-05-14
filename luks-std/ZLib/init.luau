@@ -1,4 +1,6 @@
 --!strict
+--!native
+--!optimize 2
 
 --[[
     ZLib Module — Native Zlib compression/decompression for Luau.

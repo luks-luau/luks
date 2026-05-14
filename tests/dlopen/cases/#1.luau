@@ -1,3 +1,4 @@
+--!nocheck
 -- Test #1: Dlopen Object Passing and Caching
 -- Tests passing dlopen-loaded objects between modules
 

@@ -1,4 +1,6 @@
 --!strict
+--!native
+--!optimize 2
 
 --[[
     ThreadChannel Structure — OOP representation modeling nested forum discussion threads or sub-channels.
@@ -95,7 +97,7 @@ end
     Joins the active forum discussion thread using authorized bot credentials.
     @return True if successfully joined without API restriction blocks
 ]]
-function ThreadChannelMT:join(): boolean
+function ThreadChannelMT.join(self: ThreadChannel): boolean
     if not self._rest then return false end
     -- Route: PUT /channels/{thread.id}/thread-members/@me
     local ok, _ = self._rest:put("/channels/" .. self.id .. "/thread-members/@me")
@@ -106,7 +108,7 @@ end
     Leaves/withdraws from the target discussion thread scope.
     @return True if executed cleanly
 ]]
-function ThreadChannelMT:leave(): boolean
+function ThreadChannelMT.leave(self: ThreadChannel): boolean
     if not self._rest then return false end
     -- Route: DELETE /channels/{thread.id}/thread-members/@me
     local ok, _ = self._rest:delete("/channels/" .. self.id .. "/thread-members/@me")
@@ -118,7 +120,7 @@ end
     @param archived Boolean target archiving condition
     @return True if modification routes to the backend successfully
 ]]
-function ThreadChannelMT:setArchived(archived: boolean): boolean
+function ThreadChannelMT.setArchived(self: ThreadChannel, archived: boolean): boolean
     if not self._rest then return false end
     -- Route: PATCH /channels/{thread.id}
     local ok, res = self._rest:patch("/channels/" .. self.id, {

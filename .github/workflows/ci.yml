@@ -57,6 +57,16 @@ jobs:
     - name: Build release
       run: cargo build --release --verbose
 
+    - name: Check Luau standard library (Windows)
+      if: runner.os == 'Windows'
+      shell: pwsh
+      run: .\target\release\lukscli.exe check luks-std
+
+    - name: Check Luau standard library (Unix)
+      if: runner.os != 'Windows'
+      shell: bash
+      run: ./target/release/lukscli check luks-std
+
     - name: Run Luau test suite (Windows)
       if: runner.os == 'Windows'
       shell: pwsh

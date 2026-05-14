@@ -19,3 +19,6 @@ futures-lite = "2.6"
 tracing = "0.1"
 async-io = "2.4"
 luks-module-sys = { version = "0.1.0", path = "../luks-module-sys" }
+
+[target.'cfg(not(any(target_os = "android", all(target_os = "linux", target_arch = "x86"))))'.dependencies]
+mlua = { version = "0.11", features = ["luau-jit"] }

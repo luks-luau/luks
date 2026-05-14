@@ -1,4 +1,6 @@
 --!strict
+--!native
+--!optimize 2
 
 --[[
     Crypto Module — High-performance native Cryptographic functions for Luau.

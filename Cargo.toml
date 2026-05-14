@@ -13,7 +13,9 @@ members = [
     "luks-std/Crypto",
     "luks-std/FileSystem",
     "luks-std/Stdio",
-    "crates/luks-module-sys"
+    "crates/luks-module-sys",
+    "crates/luau-analyzer-sys",
+    "crates/lukschecker"
 ]
 resolver = "2"
 

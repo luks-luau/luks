@@ -1,19 +1,21 @@
 --!strict
+--!native
+--!optimize 2
 
 --[[
     Client Namespace — Base Object-Oriented Application orchestrator for luks-std/Discord.
 ]]
 
-local Signal = require("../Signal")
-local Rest = require("./Rest")
-local Gateway = require("./Gateway")
-local Channel = require("./Structures/Channel")
-local User = require("./Structures/User")
-local Message = require("./Structures/Message")
-local Guild = require("./Structures/Guild")
-local Member = require("./Structures/Member")
-local Interaction = require("./Structures/Interaction")
-local VoiceState = require("./Structures/VoiceState")
+local Signal = require("@self/../Signal")
+local Rest = require("@self/Rest")
+local Gateway = require("@self/Gateway")
+local Channel = require("@self/Structures/Channel")
+local User = require("@self/Structures/User")
+local Message = require("@self/Structures/Message")
+local Guild = require("@self/Structures/Guild")
+local Member = require("@self/Structures/Member")
+local Interaction = require("@self/Structures/Interaction")
+local VoiceState = require("@self/Structures/VoiceState")
 
 export type DiscordClient = {
     --[[ Authentication API Token. ]]
@@ -122,7 +124,7 @@ ClientMT.__index = ClientMT
     @return A new DiscordClient instance
 ]]
 function Client.new(options: { token: string?, intents: number?, application_id: string? }?): DiscordClient
-    local opts = options or {}
+    local opts = (options or {}) :: { token: string?, intents: number?, application_id: string? }
     
     local onReadySig = Signal.new()
     local onMessageSig = Signal.new()
@@ -245,11 +247,12 @@ function ClientMT:registerCommands(commands: { any }, guildId: string?): (boolea
         end
     end
 
+    local finalAppId = (appId or "") :: string
     local endpoint = ""
     if guildId and guildId ~= "" then
-        endpoint = "/applications/" .. appId .. "/guilds/" .. guildId .. "/commands"
+        endpoint = "/applications/" .. finalAppId .. "/guilds/" .. guildId .. "/commands"
     else
-        endpoint = "/applications/" .. appId .. "/commands"
+        endpoint = "/applications/" .. finalAppId .. "/commands"
     end
 
     return self.rest:put(endpoint, commands)

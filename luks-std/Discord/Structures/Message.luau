@@ -1,4 +1,6 @@
 --!strict
+--!native
+--!optimize 2
 
 --[[
     Message Structure — OOP Wrapper modeling text messages sent across guild and DM channels.
@@ -167,7 +169,7 @@ end
     @param contentOrOptions String text content or constructed parameter maps
     @return Success condition alongside the newly created Message object wrapper if successful
 ]]
-function MessageMT:reply(contentOrOptions: any): (boolean, Message?)
+function MessageMT.reply(self: Message, contentOrOptions: any): (boolean, Message?)
     if not self._rest then
         return false, nil
     end
@@ -193,7 +195,7 @@ end
     @param newContentOrOptions Updated message content strings or structured tables
     @return Success condition alongside the updated Message structure wrapper
 ]]
-function MessageMT:edit(newContentOrOptions: any): (boolean, Message?)
+function MessageMT.edit(self: Message, newContentOrOptions: any): (boolean, Message?)
     if not self._rest then
         return false, nil
     end
@@ -211,7 +213,7 @@ end
     Permanently wipes/deletes this message from channel storage records.
     @return True if deletion completes without backend routing faults
 ]]
-function MessageMT:delete(): boolean
+function MessageMT.delete(self: Message): boolean
     if not self._rest then return false end
     local ok, _ = self._rest:delete("/channels/" .. self.channel_id .. "/messages/" .. self.id)
     return ok
@@ -222,7 +224,7 @@ end
     @param emoji String representation or raw format character code
     @return True if the reaction packet executes correctly
 ]]
-function MessageMT:react(emoji: string): boolean
+function MessageMT.react(self: Message, emoji: string): boolean
     if not self._rest then return false end
     local encodedEmoji = string.gsub(emoji, "[^%w%-%._~]", function(c)
         return string.format("%%%02X", string.byte(c))
@@ -237,7 +239,7 @@ end
     @param autoArchiveMinutes Inactivity timeout threshold boundary (default 1440)
     @return Success condition alongside the instantiated ThreadChannel wrapper object
 ]]
-function MessageMT:startThread(name: string, autoArchiveMinutes: number?): (boolean, ThreadChannel.ThreadChannel?)
+function MessageMT.startThread(self: Message, name: string, autoArchiveMinutes: number?): (boolean, ThreadChannel.ThreadChannel?)
     if not self._rest then return false, nil end
     local payload = {
         name = tostring(name),

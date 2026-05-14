@@ -43,28 +43,11 @@ unsafe fn get_script_dir(l: *mut ffi::lua_State) -> Option<std::path::PathBuf> {
 }
 
 fn extract_source_path(src: &str) -> Option<String> {
-    if let Some(rest) = src.strip_prefix('@') {
-        return Some(rest.to_string());
+    let s = path_resolution::clean_source_name(src);
+    let p = std::path::Path::new(s);
+    if p.is_absolute() || s.ends_with(".luau") || s.ends_with(".lua") {
+        return Some(s.to_string());
     }
-
-    if let Some(inner) = src
-        .strip_prefix("[string \"")
-        .and_then(|s| s.strip_suffix("\"]"))
-    {
-        if let Some(rest) = inner.strip_prefix('@') {
-            return Some(rest.to_string());
-        }
-        let p = std::path::Path::new(inner);
-        if p.is_absolute() {
-            return Some(inner.to_string());
-        }
-    }
-
-    let p = std::path::Path::new(src);
-    if p.is_absolute() {
-        return Some(src.to_string());
-    }
-
     None
 }
 
@@ -319,6 +302,19 @@ unsafe fn luks_new_impl() -> *mut LuksRuntime {
     // This preserves compatibility with code calling `require("module")`.
     let require_wrapper =
         lua.create_function(move |_lua, module: String| -> mlua::Result<mlua::Value> {
+            if module == "@self" || module.starts_with("@self/") || module.starts_with("@self\\") {
+                let mut caller_dir = None;
+                unsafe {
+                    let _: mlua::Result<()> = _lua.exec_raw((), |state| {
+                        caller_dir = get_caller_script_dir(state).or_else(|| get_script_dir(state));
+                    });
+                }
+                let base_dir = caller_dir.unwrap_or_else(|| std::path::PathBuf::from("."));
+                let resolved = path_resolution::resolve_from_base(&base_dir, &module);
+                let resolved_str = path_resolution::make_relative_path(&base_dir, &resolved);
+                return luau_require_fn.call::<mlua::Value>(resolved_str);
+            }
+
             let adjusted_path =
                 if module.starts_with("./") || module.starts_with("../") || module.starts_with("@")
                 {
@@ -355,7 +351,7 @@ unsafe fn luks_new_impl() -> *mut LuksRuntime {
         return ptr::null_mut();
     }
 
-    let compiler = Compiler::new().set_optimization_level(1).set_debug_level(1);
+    let compiler = Compiler::new().set_optimization_level(2).set_debug_level(2);
     lua.set_compiler(compiler);
 
     Box::into_raw(Box::new(LuksRuntime { lua, scheduler }))
@@ -452,8 +448,46 @@ unsafe fn luks_execute_impl(
         .unwrap_or_else(|| ".".to_string());
     let _ = rt.lua.globals().set("__script_dir__", script_dir.clone());
 
+    // Parse `--!native` and `--!optimize <num>` directives from the top lines.
+    let mut has_native = false;
+    let mut opt_level = None;
+    for line in src.lines().take(10) {
+        let trimmed = line.trim();
+        if trimmed.contains("--!native") {
+            has_native = true;
+        }
+        if let Some(idx) = trimmed.find("--!optimize") {
+            let remainder = &trimmed[idx + "--!optimize".len()..];
+            for c in remainder.chars() {
+                if c.is_ascii_digit() {
+                    if let Ok(val) = c.to_string().parse::<u8>() {
+                        if val <= 2 {
+                            opt_level = Some(val);
+                        }
+                    }
+                    break;
+                }
+            }
+        }
+    }
+
+    // Apply granular JIT and optimization settings.
+    let final_opt = opt_level.unwrap_or(if has_native { 2 } else { 1 });
+    let compiler = Compiler::new().set_optimization_level(final_opt);
+
+    #[cfg(not(any(target_os = "android", all(target_os = "linux", target_arch = "x86"))))]
+    {
+        rt.lua.enable_jit(has_native);
+    }
+
     // Load the chunk and create a thread so it runs inside the scheduler
-    let chunk = match rt.lua.load(src).set_name(name_str).into_function() {
+    let chunk = match rt
+        .lua
+        .load(src)
+        .set_compiler(compiler)
+        .set_name(name_str)
+        .into_function()
+    {
         Ok(f) => f,
         Err(e) => {
             return ffi_utils::ffi_error_msg(format!("compile error: {}", e));

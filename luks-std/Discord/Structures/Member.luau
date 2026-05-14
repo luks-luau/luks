@@ -1,4 +1,6 @@
 --!strict
+--!native
+--!optimize 2
 
 --[[
     Member Structure — OOP Wrapper modeling guild-specific member entities.
@@ -97,11 +99,12 @@ end
     @param reason Optional moderation audit log reason descriptive justification
     @return True if successfully executed without API access constraints
 ]]
-function MemberMT:kick(reason: string?): boolean
+function MemberMT.kick(self: Member, reason: string?): boolean
     if not self._rest or not self.guild_id then return false end
+    local guildId = self.guild_id :: string
     
     local headers = reason and { ["X-Audit-Log-Reason"] = reason } or {}
-    local ok, _ = self._rest:delete("/guilds/" .. self.guild_id .. "/members/" .. self.user.id, headers)
+    local ok, _ = self._rest:delete("/guilds/" .. guildId .. "/members/" .. self.user.id, headers)
     return ok
 end
 
@@ -110,17 +113,18 @@ end
     @param options Configuration mapping setting historical message deletion windows and reason strings
     @return True if the banishment executes successfully
 ]]
-function MemberMT:ban(options: { delete_message_seconds: number?, reason: string? }?): boolean
+function MemberMT.ban(self: Member, options: { delete_message_seconds: number?, reason: string? }?): boolean
     if not self._rest or not self.guild_id then return false end
+    local guildId = self.guild_id :: string
     
-    local opts = options or {}
+    local opts = (options or {}) :: { delete_message_seconds: number?, reason: string? }
     local body: { [string]: any } = {}
     if opts.delete_message_seconds then
         body.delete_message_seconds = tonumber(opts.delete_message_seconds) or 0
     end
 
     local headers = opts.reason and { ["X-Audit-Log-Reason"] = opts.reason } or {}
-    local ok, _ = self._rest:put("/guilds/" .. self.guild_id .. "/bans/" .. self.user.id, body, headers)
+    local ok, _ = self._rest:put("/guilds/" .. guildId .. "/bans/" .. self.user.id, body, headers)
     return ok
 end
 
@@ -130,8 +134,9 @@ end
     @param reason Optional operational justification trail string
     @return True if successfully routed to the destination endpoint
 ]]
-function MemberMT:timeout(durationSeconds: number?, reason: string?): boolean
+function MemberMT.timeout(self: Member, durationSeconds: number?, reason: string?): boolean
     if not self._rest or not self.guild_id then return false end
+    local guildId = self.guild_id :: string
     
     local targetTimestamp: string? = nil
     if durationSeconds and durationSeconds > 0 then
@@ -146,7 +151,7 @@ function MemberMT:timeout(durationSeconds: number?, reason: string?): boolean
 
     local headers = reason and { ["X-Audit-Log-Reason"] = reason } or {}
     -- Timeout endpoint routes via PATCH modifying communication_disabled_until
-    local ok, _ = self._rest:patch("/guilds/" .. self.guild_id .. "/members/" .. self.user.id, {
+    local ok, _ = self._rest:patch("/guilds/" .. guildId .. "/members/" .. self.user.id, {
         communication_disabled_until = targetTimestamp
     }, headers)
     return ok
@@ -158,10 +163,11 @@ end
     @param reason Optional logging reason record string
     @return True if assignment completes cleanly
 ]]
-function MemberMT:addRole(roleId: string, reason: string?): boolean
+function MemberMT.addRole(self: Member, roleId: string, reason: string?): boolean
     if not self._rest or not self.guild_id then return false end
+    local guildId = self.guild_id :: string
     local headers = reason and { ["X-Audit-Log-Reason"] = reason } or {}
-    local ok, _ = self._rest:put("/guilds/" .. self.guild_id .. "/members/" .. self.user.id .. "/roles/" .. tostring(roleId), nil, headers)
+    local ok, _ = self._rest:put("/guilds/" .. guildId .. "/members/" .. self.user.id .. "/roles/" .. tostring(roleId), nil, headers)
     return ok
 end
 
@@ -171,10 +177,11 @@ end
     @param reason Optional logging reason record string
     @return True if successfully unassigned
 ]]
-function MemberMT:removeRole(roleId: string, reason: string?): boolean
+function MemberMT.removeRole(self: Member, roleId: string, reason: string?): boolean
     if not self._rest or not self.guild_id then return false end
+    local guildId = self.guild_id :: string
     local headers = reason and { ["X-Audit-Log-Reason"] = reason } or {}
-    local ok, _ = self._rest:delete("/guilds/" .. self.guild_id .. "/members/" .. self.user.id .. "/roles/" .. tostring(roleId), headers)
+    local ok, _ = self._rest:delete("/guilds/" .. guildId .. "/members/" .. self.user.id .. "/roles/" .. tostring(roleId), headers)
     return ok
 end
 

@@ -1,4 +1,6 @@
 --!strict
+--!native
+--!optimize 2
 
 --[[
     Interaction Structure — OOP Wrapper for managing incoming Application Commands, Buttons, and Modal interactions.
@@ -167,7 +169,7 @@ end
     @param contentOrOptions String text content or compiled response options block
     @return True if transmitted without network faults
 ]]
-function InteractionMT:reply(contentOrOptions: any): boolean
+function InteractionMT.reply(self: Interaction, contentOrOptions: any): boolean
     if not self._rest or self._replied then return false end
     
     local resData = buildInteractionData(contentOrOptions)
@@ -188,7 +190,7 @@ end
     @param ephemeral Renders thinking state visible solely to the execution caller
     @return True if the frame packet executes without socket errors
 ]]
-function InteractionMT:deferReply(ephemeral: boolean?): boolean
+function InteractionMT.deferReply(self: Interaction, ephemeral: boolean?): boolean
     if not self._rest or self._replied or self._deferred then return false end
     
     local flags = ephemeral == true and 64 or 0
@@ -209,7 +211,7 @@ end
     @param contentOrOptions Replacement string payload or configuration block maps
     @return Success condition alongside modified message maps or error strings
 ]]
-function InteractionMT:editReply(contentOrOptions: any): (boolean, any)
+function InteractionMT.editReply(self: Interaction, contentOrOptions: any): (boolean, any)
     if not self._rest then return false, nil end
     
     local payload = buildInteractionData(contentOrOptions)
@@ -221,7 +223,7 @@ end
     @param contentOrOptions Message body content string or rich dictionary maps
     @return Success condition alongside compiled payload table mapping outputs
 ]]
-function InteractionMT:followUp(contentOrOptions: any): (boolean, any)
+function InteractionMT.followUp(self: Interaction, contentOrOptions: any): (boolean, any)
     if not self._rest then return false, nil end
     
     local payload = buildInteractionData(contentOrOptions)
@@ -233,7 +235,7 @@ end
     @param modalBuilder Constructed modal configuration table envelope
     @return True if the dialog packet executes successfully
 ]]
-function InteractionMT:showModal(modalBuilder: any): boolean
+function InteractionMT.showModal(self: Interaction, modalBuilder: any): boolean
     if not self._rest or self._replied then return false end
     
     local modalData = {}
@@ -260,7 +262,7 @@ end
     @param customId Component extraction key query matching form inputs
     @return Parsed character input string if matched successfully
 ]]
-function InteractionMT:getTextInputValue(customId: string): string?
+function InteractionMT.getTextInputValue(self: Interaction, customId: string): string?
     if self.type ~= 5 or not self.data or not self.data.components then
         return nil
     end

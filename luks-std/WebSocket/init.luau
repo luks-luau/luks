@@ -1,4 +1,6 @@
 --!strict
+--!native
+--!optimize 2
 
 --[[
     WebSocket Module — Native WebSocket client for Luau.

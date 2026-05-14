@@ -3,7 +3,7 @@ setlocal EnableExtensions EnableDelayedExpansion
 echo Building luks-luau for Windows...
 
 REM Step 1: Build luksruntime
-echo [1/3] Building luksruntime...
+echo [1/4] Building luksruntime...
 cargo build -p luksruntime --release
 if %errorlevel% neq 0 (
     echo ERROR: Failed to build luksruntime
@@ -11,7 +11,7 @@ if %errorlevel% neq 0 (
 )
 
 REM Step 2: Rename luksruntime.dll.lib to luksruntime.lib
-echo [2/3] Renaming luksruntime.dll.lib to luksruntime.lib...
+echo [2/4] Renaming luksruntime.dll.lib to luksruntime.lib...
 if exist "target\release\luksruntime.dll.lib" (
     move /Y "target\release\luksruntime.dll.lib" "target\release\luksruntime.lib"
     if !errorlevel! neq 0 (
@@ -23,8 +23,16 @@ if exist "target\release\luksruntime.dll.lib" (
     exit /b 1
 )
 
+REM Step 2.5: Build lukschecker
+echo [3/4] Building lukschecker...
+cargo build -p lukschecker --release
+if %errorlevel% neq 0 (
+    echo ERROR: Failed to build lukschecker
+    exit /b 1
+)
+
 REM Step 3: Build lukscli
-echo [3/3] Building lukscli...
+echo [4/4] Building lukscli...
 cargo build -p lukscli --release
 if %errorlevel% neq 0 (
     echo ERROR: Failed to build lukscli
@@ -32,7 +40,7 @@ if %errorlevel% neq 0 (
 )
 
 REM Step 4: Install binaries and ensure PATH
-echo [4/4] Installing luks to system path...
+echo Installing luks to system path...
 
 REM Define os diretórios de instalação. A expansão atrasada (!VAR!) evita problemas com parênteses.
 if defined ProgramFiles(x86) (
@@ -68,6 +76,7 @@ if !errorlevel! neq 0 (
     echo New-Item -ItemType Directory -Force -Path $dst ^| Out-Null >> "!ELEVATED_PS!"
     echo Copy-Item -LiteralPath "$srcDir\lukscli.exe" -Destination "$dst\luks.exe" -Force >> "!ELEVATED_PS!"
     echo Copy-Item -LiteralPath "$srcDir\luksruntime.dll" -Destination "$dst\luksruntime.dll" -Force >> "!ELEVATED_PS!"
+    echo Copy-Item -LiteralPath "$srcDir\lukschecker.dll" -Destination "$dst\lukschecker.dll" -Force >> "!ELEVATED_PS!"
 
     powershell -NoProfile -ExecutionPolicy Bypass -Command "Start-Process -FilePath powershell -ArgumentList '-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File ""!ELEVATED_PS!""' -Verb RunAs -Wait -WindowStyle Hidden"
     set "ELEVATE_EXIT=!errorlevel!"
@@ -89,11 +98,23 @@ if !errorlevel! neq 0 (
             echo ERROR: Failed to copy luksruntime.dll to "!INSTALL_BIN!"
             exit /b 1
         )
+
+        copy /Y "target\release\lukschecker.dll" "!INSTALL_BIN!\lukschecker.dll" >nul
+        if !errorlevel! neq 0 (
+            echo ERROR: Failed to copy lukschecker.dll to "!INSTALL_BIN!"
+            exit /b 1
+        )
     )
 ) else (
     copy /Y "target\release\luksruntime.dll" "!INSTALL_BIN!\luksruntime.dll" >nul
     if !errorlevel! neq 0 (
         echo ERROR: Failed to copy luksruntime.dll to "!INSTALL_BIN!"
+        exit /b 1
+    )
+
+    copy /Y "target\release\lukschecker.dll" "!INSTALL_BIN!\lukschecker.dll" >nul
+    if !errorlevel! neq 0 (
+        echo ERROR: Failed to copy lukschecker.dll to "!INSTALL_BIN!"
         exit /b 1
     )
 )
@@ -118,7 +139,9 @@ echo Build completed successfully!
 echo Output:
 echo   - luksruntime.dll: target\release\luksruntime.dll
 echo   - luksruntime.lib: target\release\luksruntime.lib
+echo   - lukschecker.dll: target\release\lukschecker.dll
 echo   - lukscli.exe: target\release\lukscli.exe
 echo Installed:
 echo   - luks.exe: %INSTALL_BIN%\luks.exe
 echo   - luksruntime.dll: %INSTALL_BIN%\luksruntime.dll
+echo   - lukschecker.dll: %INSTALL_BIN%\lukschecker.dll

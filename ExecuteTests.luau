@@ -36,163 +36,193 @@ else
 
     -- Secure static fallback array ensuring coverage if source reading encounters errors
     if #categories == 0 then
-        categories = { "require", "dlopen", "task", "signal", "json", "http", "websocket", "zlib", "crypto", "process", "filesystem", "stdio" }
+        categories = { "require", "dlopen", "task", "signal", "json", "http", "websocket", "zlib", "crypto", "process", "filesystem", "stdio", "jit" }
     end
 end
 
 local total_passed = 0
 local total_failed = 0
+local completed_categories = 0
+local failureReports = {}
 
-for _, category in ipairs(categories) do
-    -- Autonomously map target folder case files sorting indices numerically
-    local scheduledTests = {}
-    local ok_dir, files = pcall(FileSystem.readDir, "tests/" .. category .. "/cases")
-    if ok_dir and files then
-        local sortedFiles = {}
-        for _, f in ipairs(files) do
-            local num = f:match("#(%d+)%.luau")
-            if num then
-                table.insert(sortedFiles, { name = f, num = tonumber(num) })
-            end
+local categoryStates = {}
+for idx, cat in ipairs(categories) do
+    categoryStates[idx] = {
+        name = cat,
+        statusText = "starting...",
+        statusType = "RUNNING", -- RUNNING, PASS, FAIL
+        exitCode = nil
+    }
+end
+
+local function formatShort(tName)
+    if #tName > 35 then
+        return tName:sub(1, 32) .. "..."
+    end
+    return tName
+end
+
+local function renderDashboard()
+    if is_ci then return end
+    -- Construct a single atomic string buffer to prevent thread interleaving
+    local buf = "\27[" .. #categories .. "A" -- Move up to the first category row
+    for i = 1, #categories do
+        local st = categoryStates[i]
+        local prefix = string.format("[%s]", st.name)
+        local lineText = ""
+        if st.statusType == "PASS" then
+            lineText = string.format("\27[32m%-15s ok\27[0m", prefix)
+        elseif st.statusType == "FAIL" then
+            lineText = string.format("\27[31m%-15s fail (exit status: %s)\27[0m", prefix, tostring(st.exitCode))
+        else
+            lineText = string.format("%-15s running: %s", prefix, st.statusText)
         end
-        table.sort(sortedFiles, function(a, b) return a.num < b.num end)
+        
+        -- Guarantee text length never exceeds standard column width to avoid wrapping shifts
+        buf = buf .. "\r\27[2K" .. lineText .. "\n"
+    end
+    out:write(buf):flush()
+end
 
-        for _, sf in ipairs(sortedFiles) do
-            local ok_read_case, content = pcall(FileSystem.readFile, "tests/" .. category .. "/cases/" .. sf.name)
-            if ok_read_case and content then
-                for testName in content:gmatch("h%.test%(['\"]%s*([^'\"]+)%s*['\"]") do
-                    local cleanTestName = testName:upper():match("^%s*(.-)%s*$")
-                    table.insert(scheduledTests, { file = sf.name, test = cleanTestName })
+if not is_ci then
+    out:writeLine("")
+    for _ = 1, #categories do
+        out:writeLine("")
+    end
+    out:flush()
+    renderDashboard()
+end
+
+for idx, category in ipairs(categories) do
+    task.spawn(function()
+        local scheduledTests = {}
+        local ok_dir, files = pcall(FileSystem.readDir, "tests/" .. category .. "/cases")
+        if ok_dir and files then
+            local sortedFiles = {}
+            for _, f in ipairs(files) do
+                local num = f:match("#(%d+)%.luau")
+                if num then
+                    table.insert(sortedFiles, { name = f, num = tonumber(num) })
                 end
             end
-        end
-    end
+            table.sort(sortedFiles, function(a, b) return a.num < b.num end)
 
-    local child = Stdio.spawnStream(luksExe, { "tests/main.luau", category })
-    
-    local lastSuccessfulTest = nil
-    local firstFailedTest = nil
-    local currentTestIndex = 1
-    local streamBuffer = ""
-
-    local function formatShort(tName)
-        if #tName > 55 then
-            return tName:sub(1, 52) .. "..."
-        end
-        return tName
-    end
-
-    -- Render clean atomic initial testing state line
-    if #scheduledTests > 0 then
-        if is_ci then
-            out:fmt("[%s] testing: %s\n", category, scheduledTests[1].test:lower()):flush()
-        else
-            out:fmt("\r\27[2K[%s] testing: %s", category, formatShort(scheduledTests[1].test:lower())):flush()
-        end
-    else
-        if is_ci then
-            out:fmt("[%s] running...\n", category):flush()
-        else
-            out:fmt("\r\27[2K[%s] running...", category):flush()
-        end
-    end
-
-    child.onStdout:Connect(function(chunk)
-        streamBuffer = streamBuffer .. chunk
-        while true do
-            local newlinePos = streamBuffer:find("\n")
-            if not newlinePos then
-                break
-            end
-
-            local line = streamBuffer:sub(1, newlinePos - 1)
-            streamBuffer = streamBuffer:sub(newlinePos + 1)
-
-            local cleanLine = line:gsub("\27%[%d+m", "")
-            local matchedName, statusStr = cleanLine:match("->%s*(.-)%s*%[([PF][A-Z]+)%]")
-            if matchedName then
-                local cleanName = matchedName:match("^%s*(.-)%s*$")
-                currentTestIndex += 1
-
-                if statusStr == "PASS" then
-                    lastSuccessfulTest = cleanName:upper()
-                    if is_ci then
-                        out:fmt("[%s] success: %s\n", category, cleanName:lower()):flush()
-                    else
-                        out:fmt("\r\27[2K[%s] success: %s", category, formatShort(cleanName:lower())):flush()
+            for _, sf in ipairs(sortedFiles) do
+                local ok_read_case, content = pcall(FileSystem.readFile, "tests/" .. category .. "/cases/" .. sf.name)
+                if ok_read_case and content then
+                    for testName in content:gmatch("h%.test%(['\"]%s*([^'\"]+)%s*['\"]") do
+                        local cleanTestName = testName:upper():match("^%s*(.-)%s*$")
+                        table.insert(scheduledTests, { file = sf.name, test = cleanTestName })
                     end
-                elseif statusStr == "FAIL" then
-                    if not firstFailedTest then
-                        firstFailedTest = cleanName:upper()
-                    end
-                    if is_ci then
-                        out:fmt("[%s] failed: %s\n", category, cleanName:lower()):flush()
-                    else
-                        out:fmt("\r\27[2K[%s] failed: %s", category, formatShort(cleanName:lower())):flush()
-                    end
-                end
-                
-                if not is_ci and currentTestIndex <= #scheduledTests then
-                    out:fmt("\r\27[2K[%s] testing: %s", category, formatShort(scheduledTests[currentTestIndex].test:lower())):flush()
                 end
             end
         end
-    end)
 
-    -- Silently consume sub-process standard error streams preserving pure minimalist display focus
-    child.onStderr:Connect(function(_) end)
+        local child = Stdio.spawnStream(luksExe, { "tests/main.luau", category })
+        
+        local _lastSuccessfulTest = nil
+        local firstFailedTest = nil
+        local activeRunningTest = nil
+        local streamBuffer = ""
 
-    local exitCode = nil
-    child.onExit:Once(function(code)
-        exitCode = code
-    end)
+        child.onStdout:Connect(function(chunk)
+            streamBuffer = streamBuffer .. chunk
+            while true do
+                local newlinePos = streamBuffer:find("\n")
+                if not newlinePos then
+                    break
+                end
 
-    while exitCode == nil do
-        task.wait(0.01)
-    end
+                local line = streamBuffer:sub(1, newlinePos - 1)
+                streamBuffer = streamBuffer:sub(newlinePos + 1)
 
-    if exitCode == 0 then
-        if is_ci then
-            out:color("green"):fmt("[%s] ok\n", category):color("reset"):flush()
-        else
-            out:color("green"):fmt("\r\27[2K[%s] ok\n", category):color("reset"):flush()
+                local cleanLine = line:gsub("\27%[%d+m", "")
+                local matchedName, statusStr = cleanLine:match("->%s*(.-)%s*%[([A-Z]+)%]")
+                if matchedName then
+                    local cleanName = matchedName:match("^%s*(.-)%s*$")
+
+                    if statusStr == "RUNNING" then
+                        activeRunningTest = cleanName:upper()
+                        categoryStates[idx].statusText = formatShort(cleanName:lower())
+                        renderDashboard()
+                    elseif statusStr == "PASS" then
+                        local _lastSuccessfulTest = cleanName:upper()
+                        if activeRunningTest == cleanName:upper() then
+                            activeRunningTest = nil
+                        end
+                        if is_ci then
+                            out:fmt("[%s] success: %s\n", category, cleanName:lower()):flush()
+                        end
+                    elseif statusStr == "FAIL" then
+                        if not firstFailedTest then
+                            firstFailedTest = cleanName:upper()
+                        end
+                        if activeRunningTest == cleanName:upper() then
+                            activeRunningTest = nil
+                        end
+                        if is_ci then
+                            out:fmt("[%s] failed: %s\n", category, cleanName:lower()):flush()
+                        end
+                    end
+                end
+            end
+        end)
+
+        child.onStderr:Connect(function(_) end)
+
+        local exitCode = nil
+        child.onExit:Once(function(code)
+            exitCode = code
+        end)
+
+        while exitCode == nil do
+            task.wait(0.01)
         end
-        total_passed += 1
-    else
-        out:writeLine("") -- Preserve target frozen testing state indicator line
-        out:color("red"):fmt("[%s] fail (exit status: %d)\n", category, exitCode):color("reset"):flush()
 
-        -- Determine the exact target test case responsible for the failure or memory corruption crash
-        local targetCaseName = firstFailedTest
+        categoryStates[idx].exitCode = exitCode
+        if exitCode == 0 then
+            categoryStates[idx].statusType = "PASS"
+            total_passed += 1
+            if is_ci then
+                out:color("green"):fmt("[%s] ok\n", category):color("reset"):flush()
+            end
+        else
+            categoryStates[idx].statusType = "FAIL"
+            total_failed += 1
+            if is_ci then
+                out:color("red"):fmt("[%s] fail (exit status: %d)\n", category, exitCode):color("reset"):flush()
+            end
 
-        if not targetCaseName then
-            if lastSuccessfulTest == nil and #scheduledTests > 0 then
-                targetCaseName = scheduledTests[1].test
-            elseif lastSuccessfulTest ~= nil then
-                for idx, item in ipairs(scheduledTests) do
-                    if item.test == lastSuccessfulTest and idx < #scheduledTests then
-                        targetCaseName = scheduledTests[idx + 1].test
+            local targetCaseName = firstFailedTest or activeRunningTest
+            if targetCaseName then
+                local originFile = "unknown"
+                for _, item in ipairs(scheduledTests) do
+                    if item.test == targetCaseName then
+                        originFile = item.file
                         break
                     end
                 end
+                table.insert(failureReports, string.format("[%s] fail\n  -> target case: %s\n  -> origin file: tests/%s/cases/%s", category, targetCaseName:lower(), category, originFile))
+            else
+                table.insert(failureReports, string.format("[%s] fail (exit status: %d)", category, exitCode))
             end
         end
 
-        if targetCaseName then
-            local originFile = "unknown"
-            for _, item in ipairs(scheduledTests) do
-                if item.test == targetCaseName then
-                    originFile = item.file
-                    break
-                end
-            end
-            out:fmt("  -> target case: %s\n", targetCaseName:lower())
-            out:fmt("  -> origin file: tests/%s/cases/%s\n", category, originFile):flush()
-        end
+        renderDashboard()
+        completed_categories += 1
+    end)
+end
 
-        total_failed += 1
-        break
+while completed_categories < #categories do
+    task.wait(0.01)
+end
+
+if #failureReports > 0 then
+    out:writeLine("\n")
+    for _, rep in ipairs(failureReports) do
+        out:color("red"):writeLine(rep):color("reset")
     end
+    out:flush()
 end
 
 if total_failed == 0 then
