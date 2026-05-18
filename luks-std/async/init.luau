@@ -2,7 +2,7 @@
 -- luks-std/Async/init.luau
 -- Innovative API inspired by the 'futures' and 'tokio' Rust ecosystem using Signals
 
-local Signal = require("@self/deps/Signal")
+local Signal = require("@self/deps/signal")
 
 --[[
     Represents a filesystem, network, or execution error.

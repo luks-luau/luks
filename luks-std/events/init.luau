@@ -8,7 +8,7 @@
     Inspired by high-performance event loops, featuring Signal-based updates.
 ]]
 
-local Signal = require("@self/deps/Signal")
+local Signal = require("@self/deps/signal")
 
 local Events = {}
 
