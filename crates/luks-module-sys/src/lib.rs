@@ -46,6 +46,12 @@ pub struct LuauAPI {
     pub lua_toboolean: unsafe extern "C-unwind" fn(*mut lua_State, c_int) -> c_int,
     pub lua_topointer:
         unsafe extern "C-unwind" fn(*mut lua_State, c_int) -> *const std::ffi::c_void,
+    pub lua_newuserdata:
+        unsafe extern "C-unwind" fn(*mut lua_State, usize) -> *mut std::ffi::c_void,
+    pub lua_tobuffer:
+        unsafe extern "C-unwind" fn(*mut lua_State, c_int, *mut usize) -> *mut std::ffi::c_void,
+    pub lua_newbuffer: unsafe extern "C-unwind" fn(*mut lua_State, usize) -> *mut std::ffi::c_void,
+    pub lua_pushlightuserdata: unsafe extern "C-unwind" fn(*mut lua_State, *mut std::ffi::c_void),
 }
 
 static mut API: *const LuauAPI = std::ptr::null();
@@ -465,4 +471,48 @@ pub unsafe fn lua_tonumber(l: *mut lua_State, idx: c_int) -> f64 {
 #[inline(always)]
 pub unsafe fn lua_tointeger(l: *mut lua_State, idx: c_int) -> i64 {
     lua_tointegerx(l, idx, std::ptr::null_mut())
+}
+
+/// # Safety
+/// - `l` must be a valid pointer to a `lua_State`.
+/// - The global `API` VTable must have been initialized via `init_api`.
+#[inline(always)]
+pub unsafe fn lua_newuserdata(l: *mut lua_State, size: usize) -> *mut std::ffi::c_void {
+    ((*API).lua_newuserdata)(l, size)
+}
+
+/// # Safety
+/// - `l` must be a valid pointer to a `lua_State`.
+/// - The global `API` VTable must have been initialized via `init_api`.
+#[inline(always)]
+pub unsafe fn lua_tobuffer(
+    l: *mut lua_State,
+    idx: c_int,
+    len: *mut usize,
+) -> *mut std::ffi::c_void {
+    ((*API).lua_tobuffer)(l, idx, len)
+}
+
+/// # Safety
+/// - `l` must be a valid pointer to a `lua_State`.
+/// - The global `API` VTable must have been initialized via `init_api`.
+#[inline(always)]
+pub unsafe fn lua_newbuffer(l: *mut lua_State, size: usize) -> *mut std::ffi::c_void {
+    ((*API).lua_newbuffer)(l, size)
+}
+
+/// # Safety
+/// - `l` must be a valid pointer to a `lua_State`.
+/// - The global `API` VTable must have been initialized via `init_api`.
+#[inline(always)]
+pub unsafe fn lua_pushlightuserdata(l: *mut lua_State, p: *mut std::ffi::c_void) {
+    ((*API).lua_pushlightuserdata)(l, p)
+}
+
+/// # Safety
+/// - `l` must be a valid pointer to a `lua_State`.
+/// - The global `API` VTable must have been initialized via `init_api`.
+#[inline(always)]
+pub unsafe fn lua_touserdata(l: *mut lua_State, idx: c_int) -> *mut std::ffi::c_void {
+    lua_topointer(l, idx) as *mut std::ffi::c_void
 }
