@@ -1,7 +1,11 @@
 [package]
 name = "luks-module-sys"
-version = "0.1.0"
+version.workspace = true
 edition = "2021"
+license.workspace = true
+repository = "https://github.com/luks-luau/luks/tree/main/crates/luks-module-sys"
+description = "Low-level bindings and VM FFI bridge utilities for the Luks modular runtime"
+readme = "README.md"
 
 [dependencies]
 mlua-sys = { version = "0.10", features = ["luau"], default-features = false }
