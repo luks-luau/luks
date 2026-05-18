@@ -1,6 +1,9 @@
 -- Test Helpers Module
 -- Provides assertion functions for structured testing
-
+local IO = require("../luks-std/io")
+local env = require("../luks-std/env")
+local out = IO.stdout()
+local _is_ci = env.var("CI") ~= nil or env.var("GITHUB_ACTIONS") ~= nil
 local helpers = {}
 
 -- Current category and case being tested (set by runner)
@@ -17,13 +20,16 @@ local colors = {
 }
 
 function helpers.print_banner(title)
-    print("=========================================")
-    print("      " .. title)
-    print("=========================================")
+    local separator = "========================================="
+    out:write_all(separator .. "\n"):Wait()
+    out:write_all("      " .. title .. "\n"):Wait()
+    out:write_all(separator .. "\n"):Wait()
+    out:flush():Wait()
 end
 
 function helpers.print_phase(message)
-    print("\n>> " .. message)
+    out:write_all("\n>> " .. message .. "\n"):Wait()
+    out:flush():Wait()
 end
 
 -- Stats tracking
@@ -45,25 +51,25 @@ function helpers.format_status(status)
     end
 end
 
-local Stdio = require("../luks-std/Stdio")
-local out = Stdio.stdout()
-
 -- Print test result in required format
 -- Format: CATEGORY -> FUNCTION_NAME [STATUS]
 -- All colored in blue for PASS, yellow for FAIL
 function helpers.print_result(category, _case_num, test_name, status)
     local colored_status = helpers.format_status(status)
     -- Color the whole line based on status
+    local line
     if status == "PASS" then
-        out:writeLine(string.format("%s%s -> %s %s%s",
-            colors.blue, category:upper(), test_name:upper(), colored_status, colors.reset)):flush()
+        line = string.format("%s%s -> %s %s%s\n",
+            colors.blue, category:upper(), test_name:upper(), colored_status, colors.reset)
     elseif status == "RUNNING" then
-        out:writeLine(string.format("%s -> %s %s",
-            category:upper(), test_name:upper(), colored_status)):flush()
+        line = string.format("%s -> %s %s\n",
+            category:upper(), test_name:upper(), colored_status)
     else
-        out:writeLine(string.format("%s%s -> %s %s%s",
-            colors.yellow, category:upper(), test_name:upper(), colored_status, colors.reset)):flush()
+        line = string.format("%s%s -> %s %s%s\n",
+            colors.yellow, category:upper(), test_name:upper(), colored_status, colors.reset)
     end
+    out:write_all(line):Wait()
+    out:flush():Wait()
 end
 
 -- Assertion functions
@@ -120,6 +126,7 @@ end
 -- Prints immediately in required format
 function helpers.test(name, fn)
     helpers.print_result(helpers.current_category, helpers.current_case, name, "RUNNING")
+
     local success, err = pcall(fn)
     local status = success and "PASS" or "FAIL"
 
@@ -134,7 +141,8 @@ function helpers.test(name, fn)
     -- Print in required format: CATEGORY -> FUNCTION_NAME [STATUS]
     helpers.print_result(helpers.current_category, helpers.current_case, name, status)
     if not success then
-        print(string.format("  error: %s", tostring(err)))
+        out:write_all(string.format("  error: %s\n", tostring(err))):Wait()
+        out:flush():Wait()
     end
 
     return status, err
@@ -167,15 +175,17 @@ end
 -- Print minimal summary (English)
 function helpers.print_summary()
     local s = helpers.get_stats()
-    print(string.format("\nTotal: %d | Passed: %d | Failed: %d",
-        s.total, s.passed, s.failed))
+    out:write_all(string.format("\nTotal: %d | Passed: %d | Failed: %d\n",
+        s.total, s.passed, s.failed)):Wait()
+    out:flush():Wait()
 end
 
 function helpers.print_final_summary(total, passed, failed)
-    print(string.format("\nTotal: %d | Passed: %s%d%s | Failed: %s%d%s",
+    out:write_all(string.format("\nTotal: %d | Passed: %s%d%s | Failed: %s%d%s\n",
         total,
         colors.yellow, passed, colors.reset,
-        colors.blue, failed, colors.reset))
+        colors.blue, failed, colors.reset)):Wait()
+    out:flush():Wait()
 end
 
 -- Full summary (for compatibility)
