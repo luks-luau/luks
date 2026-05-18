@@ -15,9 +15,11 @@
 
 typedef void (*DiagnosticCallback)(void* context, int severity, unsigned int line, unsigned int col, unsigned int endLine, unsigned int endCol, const char* message);
 typedef const char* (*ReadSourceCallback)(void* context, const char* moduleName);
+typedef const char* (*ResolveModuleCallback)(void* context, const char* currentModule, const char* requiredName);
 
 struct CustomFileResolver : Luau::FileResolver {
     ReadSourceCallback callback = nullptr;
+    ResolveModuleCallback resolveCallback = nullptr;
     void* context = nullptr;
 
     std::optional<Luau::SourceCode> readSource(const Luau::ModuleName& name) override {
@@ -33,11 +35,21 @@ struct CustomFileResolver : Luau::FileResolver {
         return std::nullopt;
     }
 
-    std::optional<Luau::ModuleInfo> resolveModule(const Luau::ModuleInfo* context, Luau::AstExpr* expr, const Luau::TypeCheckLimits& limits) override {
+    std::optional<Luau::ModuleInfo> resolveModule(const Luau::ModuleInfo* contextInfo, Luau::AstExpr* expr, const Luau::TypeCheckLimits& limits) override {
         if (expr) {
             if (auto str = expr->as<Luau::AstExprConstantString>()) {
+                std::string req = std::string(str->value.data, str->value.size);
+                if (resolveCallback && contextInfo) {
+                    const char* resolved = resolveCallback(context, contextInfo->name.c_str(), req.c_str());
+                    if (resolved) {
+                        Luau::ModuleInfo info;
+                        info.name = resolved;
+                        info.optional = false;
+                        return info;
+                    }
+                }
                 Luau::ModuleInfo info;
-                info.name = std::string(str->value.data, str->value.size);
+                info.name = req;
                 info.optional = false;
                 return info;
             }
@@ -88,8 +100,9 @@ struct LuauAnalyzer {
         );
     }
 
-    void load(const char* moduleName, ReadSourceCallback readCallback, DiagnosticCallback diagCallback, void* context) {
+    void load(const char* moduleName, ReadSourceCallback readCallback, ResolveModuleCallback resolveCallback, DiagnosticCallback diagCallback, void* context) {
         fileResolver.callback = readCallback;
+        fileResolver.resolveCallback = resolveCallback;
         fileResolver.context = context;
 
         Luau::CheckResult result = frontend->check(moduleName);
@@ -129,6 +142,7 @@ struct LuauAnalyzer {
         }
 
         fileResolver.callback = nullptr;
+        fileResolver.resolveCallback = nullptr;
         fileResolver.context = nullptr;
     }
 };
@@ -153,11 +167,12 @@ void luau_analyzer_check(
     LuauAnalyzer* analyzer,
     const char* module_name,
     ReadSourceCallback read_callback,
+    ResolveModuleCallback resolve_callback,
     DiagnosticCallback diag_callback,
     void* context
 ) {
     if (analyzer && module_name) {
-        analyzer->load(module_name, read_callback, diag_callback, context);
+        analyzer->load(module_name, read_callback, resolve_callback, diag_callback, context);
     }
 }
 

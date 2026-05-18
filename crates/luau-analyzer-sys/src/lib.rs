@@ -30,6 +30,12 @@ type DiagnosticCallback = unsafe extern "C" fn(
 type ReadSourceCallback =
     unsafe extern "C" fn(context: *mut c_void, module_name: *const c_char) -> *const c_char;
 
+type ResolveModuleCallback = unsafe extern "C" fn(
+    context: *mut c_void,
+    current_module: *const c_char,
+    required_name: *const c_char,
+) -> *const c_char;
+
 extern "C" {
     fn luau_analyzer_create() -> *mut LuauAnalyzerOpaque;
     fn luau_analyzer_destroy(analyzer: *mut LuauAnalyzerOpaque);
@@ -38,6 +44,7 @@ extern "C" {
         analyzer: *mut LuauAnalyzerOpaque,
         module_name: *const c_char,
         read_callback: Option<ReadSourceCallback>,
+        resolve_callback: Option<ResolveModuleCallback>,
         diag_callback: Option<DiagnosticCallback>,
         context: *mut c_void,
     );
@@ -47,6 +54,7 @@ struct CheckContext<'a> {
     diagnostics: Vec<Diagnostic>,
     cached_strings: HashMap<String, CString>,
     resolver: &'a dyn Fn(&str) -> Option<String>,
+    path_resolver: &'a dyn Fn(&str, &str) -> Option<String>,
 }
 
 pub struct NativeAnalyzer {
@@ -70,14 +78,21 @@ impl NativeAnalyzer {
         }
     }
 
-    pub fn check<F>(&mut self, module_name: &str, resolver: F) -> Vec<Diagnostic>
+    pub fn check<F, P>(
+        &mut self,
+        module_name: &str,
+        resolver: F,
+        path_resolver: P,
+    ) -> Vec<Diagnostic>
     where
         F: Fn(&str) -> Option<String>,
+        P: Fn(&str, &str) -> Option<String>,
     {
         let mut context = CheckContext {
             diagnostics: Vec::new(),
             cached_strings: HashMap::new(),
             resolver: &resolver,
+            path_resolver: &path_resolver,
         };
 
         if let Ok(mod_cstr) = CString::new(module_name) {
@@ -97,6 +112,35 @@ impl NativeAnalyzer {
                     if let Ok(c_str) = CString::new(src) {
                         let ptr = c_str.as_ptr();
                         ctx.cached_strings.insert(name_str.into_owned(), c_str);
+                        return ptr;
+                    }
+                }
+                std::ptr::null()
+            }
+
+            unsafe extern "C" fn resolve_callback(
+                ctx_ptr: *mut c_void,
+                curr_mod: *const c_char,
+                req_name: *const c_char,
+            ) -> *const c_char {
+                let ctx = &mut *(ctx_ptr as *mut CheckContext);
+                if curr_mod.is_null() || req_name.is_null() {
+                    return std::ptr::null();
+                }
+                let curr_mod_str = CStr::from_ptr(curr_mod).to_string_lossy();
+                let req_name_str = CStr::from_ptr(req_name).to_string_lossy();
+
+                let cache_key = format!("RESOLVED:{}:{}", curr_mod_str, req_name_str);
+                if let Some(c_str) = ctx.cached_strings.get(&cache_key) {
+                    return c_str.as_ptr();
+                }
+
+                if let Some(resolved) =
+                    (ctx.path_resolver)(curr_mod_str.as_ref(), req_name_str.as_ref())
+                {
+                    if let Ok(c_str) = CString::new(resolved) {
+                        let ptr = c_str.as_ptr();
+                        ctx.cached_strings.insert(cache_key, c_str);
                         return ptr;
                     }
                 }
@@ -134,6 +178,7 @@ impl NativeAnalyzer {
                     self.ptr,
                     mod_cstr.as_ptr(),
                     Some(read_callback),
+                    Some(resolve_callback),
                     Some(diag_callback),
                     ctx_void,
                 );
