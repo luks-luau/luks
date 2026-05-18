@@ -146,17 +146,21 @@ To optimize developer workflows across large codebases, `lukschecker` implements
 
 The workspace hosts a collection of highly-optimized native extensions implemented in Rust under the `luks-std/` directory. These submodules link seamlessly into the runtime to bridge OS capabilities directly to Luau logic:
 
-- **[`Process`](https://github.com/luks-luau/luks/blob/main/luks-std/Process/README.md)**: High-performance subprocess execution, custom environment mapping, pipeline binding, and CPU/OS host telemetry.
-- **[`Signal`](https://github.com/luks-luau/luks/blob/main/luks-std/Signal/README.md)**: Asynchronous event systems and callback dispatchers built for robust native thread communication.
+- **[`async`](https://github.com/luks-luau/luks/blob/main/luks-std/async/README.md)**: Foundational asynchronous primitives, signals, and Rust-style futures.
+- **[`env`](https://github.com/luks-luau/luks/blob/main/luks-std/env/README.md)**: Access to process environment, CLI arguments, and host system information.
+- **[`events`](https://github.com/luks-luau/luks/blob/main/luks-std/events/README.md)**: Centralized event loop and high-performance polling service.
+- **[`fs`](https://github.com/luks-luau/luks/blob/main/luks-std/fs/README.md)**: Native filesystem operations following Rust `std::fs` with full async support.
+- **[`io`](https://github.com/luks-luau/luks/blob/main/luks-std/io/README.md)**: Rust-style asynchronous I/O primitives including `Reader`, `Writer`, and `BufRead` traits.
+- **[`process`](https://github.com/luks-luau/luks/blob/main/luks-std/process/README.md)**: High-performance subprocess execution, environment mapping, and system telemetry.
+- **[`net`](https://github.com/luks-luau/luks/blob/main/luks-std/net/README.md)**: Non-blocking TCP/UDP networking and socket abstractions.
+- **[`signal`](https://github.com/luks-luau/luks/blob/main/luks-std/signal/README.md)**: Robust asynchronous event systems and callback dispatchers.
 - **[`Http`](https://github.com/luks-luau/luks/blob/main/luks-std/Http/README.md)**: Non-blocking client requests powered by dynamic TLS integrations.
-- **[`WebSocket`](https://github.com/luks-luau/luks/blob/main/luks-std/WebSocket/README.md)**: Full-duplex asynchronous communication protocol supporting robust TLS socket channels.
-- **[`Json`](https://github.com/luks-luau/luks/blob/main/luks-std/Json/README.md)**: Direct, ultra-fast structural encoding and decoding mapping directly to dynamic Lua values.
+- **[`WebSocket`](https://github.com/luks-luau/luks/blob/main/luks-std/WebSocket/README.md)**: Full-duplex asynchronous communication protocol.
+- **[`Json`](https://github.com/luks-luau/luks/blob/main/luks-std/Json/README.md)**: Ultra-fast structural encoding and decoding for Luau values.
 - **[`ZLib`](https://github.com/luks-luau/luks/blob/main/luks-std/ZLib/README.md)**: Native payload compression and decompression utilities.
 - **[`Crypto`](https://github.com/luks-luau/luks/blob/main/luks-std/Crypto/README.md)**: Secure hash algorithms and CSPRNG random generators.
-- **[`FileSystem`](https://github.com/luks-luau/luks/blob/main/luks-std/FileSystem/README.md)**: Native filesystem operations with async support.
-- **[`Stdio`](https://github.com/luks-luau/luks/blob/main/luks-std/Stdio/README.md)**: Native console I/O utilities including asynchronous input reads, formatted output streams, and child process pipelining.
-- **[`Discord`](https://github.com/luks-luau/luks/blob/main/luks-std/Discord/README.md)**: Native API wrapper and real-time gateway integrations for rich application development.
-- **[`std-template`](https://github.com/luks-luau/luks/blob/main/luks-std/std-template/README.md)**: Centralized boilerplate skeleton to guide contributors in crafting reliable and secure Luau FFI submodules.
+- **[`Discord`](https://github.com/luks-luau/luks/blob/main/luks-std/Discord/README.md)**: Native API wrapper and real-time gateway integrations.
+- **[`std-template`](https://github.com/luks-luau/luks/blob/main/luks-std/std-template/README.md)**: Contributor boilerplate for crafting reliable Luau FFI submodules.
 
 ## Building
 
