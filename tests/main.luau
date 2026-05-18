@@ -16,8 +16,64 @@ local expect = {
     same_ref = h.expect_same_ref,
 }
 
+local fs = require("../luks-std/fs")
+
+local function discover_categories(): {string}
+    local discovered = {}
+    local read_dir_res: any = nil
+    local ok = pcall(function()
+        read_dir_res = fs.read_dir("tests"):Wait()
+    end)
+    if not ok or read_dir_res == nil then
+        return {}
+    end
+    
+    while true do
+        local entry = read_dir_res:next():Wait()
+        if not entry then
+            break
+        end
+        if entry.name:sub(1, 1) == "." then
+            continue
+        end
+        
+        local is_dir = false
+        pcall(function()
+            local ft = entry:file_type():Wait()
+            is_dir = ft:is_dir()
+        end)
+        
+        if is_dir then
+            local cases_path = entry.path .. "/cases"
+            local cases_is_dir = false
+            pcall(function()
+                local meta = fs.metadata(cases_path):Wait()
+                cases_is_dir = meta:is_dir()
+            end)
+            
+            if cases_is_dir then
+                local has_files = false
+                pcall(function()
+                    local cases_dir = fs.read_dir(cases_path):Wait()
+                    local first_entry = cases_dir:next():Wait()
+                    if first_entry then
+                        has_files = true
+                    end
+                end)
+                
+                if has_files then
+                    table.insert(discovered, entry.name)
+                end
+            end
+        end
+    end
+    
+    table.sort(discovered)
+    return discovered
+end
+
 -- Auto-discovered test categories.
-local categories = args[1] ~= nil and args or { "require", "dlopen", "task", "signal", "json", "http", "websocket", "zlib", "crypto", "process", "filesystem", "stdio", "jit" }
+local categories = args[1] ~= nil and args or discover_categories()
 local test_cases = {}
 
 -- Cache for loaded test cases

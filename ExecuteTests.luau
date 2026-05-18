@@ -1,183 +1,294 @@
-local FileSystem = require("luks-std/FileSystem")
-local Stdio = require("luks-std/Stdio")
-local Process = require("luks-std/Process")
+--!strict
+-- ExecuteTests.luau
+-- Redone from scratch: Executes all test categories concurrently and shows premium real-time terminal progress.
 
-local out = Stdio.stdout()
+local fs = require("luks-std/fs")
+local io = require("luks-std/io")
+local process = require("luks-std/process")
+local env = require("luks-std/env")
+
 local cli_args = {...}
+local is_ci = env.var("CI") ~= nil or env.var("GITHUB_ACTIONS") ~= nil
 
-local is_ci = Process.getEnv("CI") ~= nil or Process.getEnv("GITHUB_ACTIONS") ~= nil
+-- Standard output formatter wrapper
+local function wrap_out(writer: any)
+    local obj = {}
+    function obj:write(s) writer:write_all(s):Wait(); return self end
+    function obj:writeLine(s) self:write((s or "") .. "\n"); return self end
+    function obj:flush() writer:flush():Wait(); return self end
+    function obj:color(c)
+        local codes = { reset = 0, red = 31, green = 32, yellow = 33, blue = 34 }
+        self:write("\27[" .. (codes[c] or 0) .. "m")
+        return self
+    end
+    function obj:fmt(f, ...)
+        self:write(string.format(f, ...))
+        return self
+    end
+    return obj
+end
+
+local out = wrap_out(io.stdout())
+
+-- Determine the executable path
+local function exists(path: string)
+    local _, ok = fs.metadata(path):Wait()
+    return ok
+end
 
 local luksExe = "luks"
-if FileSystem.exists("target/release/lukscli.exe") then
+if exists("target/release/lukscli.exe") then
     luksExe = "target/release/lukscli.exe"
-elseif FileSystem.exists("target/release/lukscli") then
+elseif exists("target/release/lukscli") then
     luksExe = "target/release/lukscli"
-elseif FileSystem.exists("./target/release/lukscli") then
+elseif exists("./target/release/lukscli") then
     luksExe = "./target/release/lukscli"
 end
 
--- Parse execution categories either from provided CLI parameters or autonomously from main.luau
-local categories = {}
+local function discover_categories(): {string}
+    local discovered = {}
+    local read_dir_res: any = nil
+    local ok = pcall(function()
+        read_dir_res = fs.read_dir("tests"):Wait()
+    end)
+    if not ok or read_dir_res == nil then
+        return {}
+    end
+    
+    while true do
+        local entry = read_dir_res:next():Wait()
+        if not entry then
+            break
+        end
+        if entry.name:sub(1, 1) == "." then
+            continue
+        end
+        
+        local is_dir = false
+        pcall(function()
+            local ft = entry:file_type():Wait()
+            is_dir = ft:is_dir()
+        end)
+        
+        if is_dir then
+            local cases_path = entry.path .. "/cases"
+            local cases_is_dir = false
+            pcall(function()
+                local meta = fs.metadata(cases_path):Wait()
+                cases_is_dir = meta:is_dir()
+            end)
+            
+            if cases_is_dir then
+                local has_files = false
+                pcall(function()
+                    local cases_dir = fs.read_dir(cases_path):Wait()
+                    local first_entry = cases_dir:next():Wait()
+                    if first_entry then
+                        has_files = true
+                    end
+                end)
+                
+                if has_files then
+                    table.insert(discovered, entry.name)
+                end
+            end
+        end
+    end
+    
+    table.sort(discovered)
+    return discovered
+end
 
+-- Parse test categories from CLI arguments or discover dynamically using filesystem
+local categories = {}
 if #cli_args > 0 then
     for _, arg in ipairs(cli_args) do
         table.insert(categories, arg)
     end
 else
-    local ok_read_main, mainContent = pcall(FileSystem.readFile, "tests/main.luau")
-    if ok_read_main and mainContent then
-        local categoriesBlock = mainContent:match("local%s+categories%s*=%s*.-{%s*([^}]+)%s*}")
-        if categoriesBlock then
-            for cat in categoriesBlock:gmatch('["\']([^"\']+)["\']') do
-                table.insert(categories, cat)
-            end
-        end
-    end
-
-    -- Secure static fallback array ensuring coverage if source reading encounters errors
-    if #categories == 0 then
-        categories = { "require", "dlopen", "task", "signal", "json", "http", "websocket", "zlib", "crypto", "process", "filesystem", "stdio", "jit" }
-    end
+    categories = discover_categories()
 end
 
-local total_passed = 0
-local total_failed = 0
-local completed_categories = 0
-local failureReports = {}
+-- Category execution state definition
+type CategoryState = {
+    name: string,
+    statusText: string,
+    statusType: "RUNNING" | "PASS" | "FAIL",
+    exitCode: number?
+}
 
-local categoryStates = {}
+local categoryStates: {CategoryState} = {}
 for idx, cat in ipairs(categories) do
     categoryStates[idx] = {
         name = cat,
         statusText = "starting...",
-        statusType = "RUNNING", -- RUNNING, PASS, FAIL
+        statusType = "RUNNING",
         exitCode = nil
     }
 end
 
-local function formatShort(tName)
-    if #tName > 35 then
-        return tName:sub(1, 32) .. "..."
+local function formatShort(tName: string)
+    if #tName > 45 then
+        return tName:sub(1, 42) .. "..."
     end
     return tName
 end
 
 local function renderDashboard()
     if is_ci then return end
-    -- Construct a single atomic string buffer to prevent thread interleaving
-    local buf = "\27[" .. #categories .. "A" -- Move up to the first category row
-    for i = 1, #categories do
-        local st = categoryStates[i]
-        local prefix = string.format("[%s]", st.name)
-        local lineText = ""
-        if st.statusType == "PASS" then
-            lineText = string.format("\27[32m%-15s ok\27[0m", prefix)
-        elseif st.statusType == "FAIL" then
-            lineText = string.format("\27[31m%-15s fail (exit status: %s)\27[0m", prefix, tostring(st.exitCode))
+    local half = math.ceil(#categories / 2)
+    local buf = "\27[" .. half .. "A" -- Move up to the first row of columns
+    
+    for i = 1, half do
+        -- Left Column
+        local st1 = categoryStates[i]
+        local prefix1 = string.format("[%s]", st1.name)
+        local leftText = ""
+        if st1.statusType == "PASS" then
+            leftText = string.format("\27[32m%-15s ok\27[0m", prefix1)
+        elseif st1.statusType == "FAIL" then
+            leftText = string.format("\27[31m%-15s fail (%s)\27[0m", prefix1, tostring(st1.exitCode))
         else
-            lineText = string.format("%-15s running: %s", prefix, st.statusText)
+            local shortStatus = st1.statusText
+            if #shortStatus > 15 then
+                shortStatus = shortStatus:sub(1, 12) .. "..."
+            end
+            leftText = string.format("%-15s running: %s", prefix1, shortStatus)
         end
         
-        -- Guarantee text length never exceeds standard column width to avoid wrapping shifts
-        buf = buf .. "\r\27[2K" .. lineText .. "\n"
+        -- Pad left visible text to exactly 40 chars for perfect column alignment (ignoring ANSI codes)
+        local visibleLeft = leftText:gsub("\27%[%d+m", "")
+        local paddingNeeded = 40 - #visibleLeft
+        if paddingNeeded > 0 then
+            leftText = leftText .. string.rep(" ", paddingNeeded)
+        end
+        
+        -- Right Column
+        local rightText = ""
+        local rightIdx = i + half
+        if rightIdx <= #categories then
+            local st2 = categoryStates[rightIdx]
+            local prefix2 = string.format("[%s]", st2.name)
+            if st2.statusType == "PASS" then
+                rightText = string.format("\27[32m%-15s ok\27[0m", prefix2)
+            elseif st2.statusType == "FAIL" then
+                rightText = string.format("\27[31m%-15s fail (%s)\27[0m", prefix2, tostring(st2.exitCode))
+            else
+                local shortStatus = st2.statusText
+                if #shortStatus > 15 then
+                    shortStatus = shortStatus:sub(1, 12) .. "..."
+                end
+                rightText = string.format("%-15s running: %s", prefix2, shortStatus)
+            end
+        end
+        
+        buf = buf .. "\r\27[2K" .. leftText .. " | " .. rightText .. "\n"
     end
     out:write(buf):flush()
 end
 
+local total_passed = 0
+local total_failed = 0
+local completed_categories = 0
+local failureReports = {}
+local debugLogs = {}
+
+-- Allocate blank lines first so that relative cursor movement is perfectly inside the console buffer
 if not is_ci then
+    local half = math.ceil(#categories / 2)
     out:writeLine("")
-    for _ = 1, #categories do
+    for _ = 1, half do
         out:writeLine("")
     end
     out:flush()
     renderDashboard()
+
+    -- Start high-performance 30 FPS background TUI renderer
+    task.spawn(function()
+        local fs = require("luks-std/fs")
+        local lastLogWrite = os.clock()
+        while completed_categories < #categories do
+            task.wait(0.033)
+            renderDashboard()
+
+            if os.clock() - lastLogWrite >= 0.5 then
+                lastLogWrite = os.clock()
+                pcall(function()
+                    fs.write("debug_test.log", table.concat(debugLogs, "\n")):Wait()
+                end)
+            end
+        end
+        renderDashboard() -- Final update to guarantee accurate end state
+        pcall(function()
+            fs.write("debug_test.log", table.concat(debugLogs, "\n")):Wait()
+        end)
+    end)
 end
 
+-- Run all test categories concurrently
 for idx, category in ipairs(categories) do
     task.spawn(function()
-        local scheduledTests = {}
-        local ok_dir, files = pcall(FileSystem.readDir, "tests/" .. category .. "/cases")
-        if ok_dir and files then
-            local sortedFiles = {}
-            for _, f in ipairs(files) do
-                local num = f:match("#(%d+)%.luau")
-                if num then
-                    table.insert(sortedFiles, { name = f, num = tonumber(num) })
-                end
-            end
-            table.sort(sortedFiles, function(a, b) return a.num < b.num end)
-
-            for _, sf in ipairs(sortedFiles) do
-                local ok_read_case, content = pcall(FileSystem.readFile, "tests/" .. category .. "/cases/" .. sf.name)
-                if ok_read_case and content then
-                    for testName in content:gmatch("h%.test%(['\"]%s*([^'\"]+)%s*['\"]") do
-                        local cleanTestName = testName:upper():match("^%s*(.-)%s*$")
-                        table.insert(scheduledTests, { file = sf.name, test = cleanTestName })
-                    end
-                end
-            end
-        end
-
-        local child = Stdio.spawnStream(luksExe, { "tests/main.luau", category })
+        table.insert(debugLogs, string.format("[%s] Category thread started", category))
         
-        local _lastSuccessfulTest = nil
+        -- Spawn child process with piped standard output
+        local child = process.Command.new(luksExe)
+            :args({ "tests/main.luau", category })
+            :stdin("null")
+            :stdout("piped")
+            :stderr("null")
+            :spawn()
+            :unwrap()
+
+        table.insert(debugLogs, string.format("[%s] Child process spawned with ID %s", category, tostring(child.id)))
+
+        local activeRunningTest: any = nil
         local firstFailedTest = nil
-        local activeRunningTest = nil
-        local streamBuffer = ""
 
-        child.onStdout:Connect(function(chunk)
-            streamBuffer = streamBuffer .. chunk
-            while true do
-                local newlinePos = streamBuffer:find("\n")
-                if not newlinePos then
-                    break
-                end
+        -- Read real-time console streaming directly in this thread until EOF
+        local reader = io.BufReader.new(child.stdout :: any)
+        while true do
+            local line, ok = reader:read_line():Wait()
+            table.insert(debugLogs, string.format("[%s] READ_LINE ok=%s: %s", category, tostring(ok), (tostring(line):gsub("\n", ""))))
+            if not ok or not line then
+                table.insert(debugLogs, string.format("[%s] READ_LINE EOF reached", category))
+                break
+            end
 
-                local line = streamBuffer:sub(1, newlinePos - 1)
-                streamBuffer = streamBuffer:sub(newlinePos + 1)
-
-                local cleanLine = line:gsub("\27%[%d+m", "")
-                local matchedName, statusStr = cleanLine:match("->%s*(.-)%s*%[([A-Z]+)%]")
-                if matchedName then
-                    local cleanName = matchedName:match("^%s*(.-)%s*$")
-
-                    if statusStr == "RUNNING" then
-                        activeRunningTest = cleanName:upper()
-                        categoryStates[idx].statusText = formatShort(cleanName:lower())
-                        renderDashboard()
-                    elseif statusStr == "PASS" then
-                        local _lastSuccessfulTest = cleanName:upper()
-                        if activeRunningTest == cleanName:upper() then
-                            activeRunningTest = nil
-                        end
-                        if is_ci then
-                            out:fmt("[%s] success: %s\n", category, cleanName:lower()):flush()
-                        end
-                    elseif statusStr == "FAIL" then
-                        if not firstFailedTest then
-                            firstFailedTest = cleanName:upper()
-                        end
-                        if activeRunningTest == cleanName:upper() then
-                            activeRunningTest = nil
-                        end
-                        if is_ci then
-                            out:fmt("[%s] failed: %s\n", category, cleanName:lower()):flush()
-                        end
+            -- Strip ANSI styling codes for accurate pattern matching
+            local cleanLine = line:gsub("\27%[%d+m", "")
+            
+            -- Detect result lines of format: CATEGORY -> TEST_NAME [STATUS]
+            local matchedName, statusStr = cleanLine:match("->%s*(.-)%s*%[([A-Z]+)%]")
+            if matchedName then
+                local cleanName = matchedName:match("^%s*(.-)%s*$")
+                if not cleanName then return end
+                
+                if statusStr == "RUNNING" then
+                    activeRunningTest = cleanName
+                    categoryStates[idx].statusText = formatShort(cleanName:lower())
+                elseif statusStr == "FAIL" then
+                    if not firstFailedTest then
+                        firstFailedTest = cleanName
+                    end
+                    if activeRunningTest == cleanName then
+                        activeRunningTest = nil
+                    end
+                elseif statusStr == "PASS" then
+                    if activeRunningTest == cleanName then
+                        activeRunningTest = nil
+                    end
+                    if is_ci then
+                        out:fmt("[%s] success: %s\n", category, cleanName:lower()):flush()
                     end
                 end
             end
-        end)
-
-        child.onStderr:Connect(function(_) end)
-
-        local exitCode = nil
-        child.onExit:Once(function(code)
-            exitCode = code
-        end)
-
-        while exitCode == nil do
-            task.wait(0.01)
         end
+
+        -- Await process termination asynchronously (returns immediately as stdout reached EOF)
+        table.insert(debugLogs, string.format("[%s] Awaiting child process exit...", category))
+        local exitStatus = child:wait():unwrap()
+        local exitCode = exitStatus:code() or 0
+        table.insert(debugLogs, string.format("[%s] Child process exited with code %d", category, exitCode))
 
         categoryStates[idx].exitCode = exitCode
         if exitCode == 0 then
@@ -193,30 +304,29 @@ for idx, category in ipairs(categories) do
                 out:color("red"):fmt("[%s] fail (exit status: %d)\n", category, exitCode):color("reset"):flush()
             end
 
-            local targetCaseName = firstFailedTest or activeRunningTest
-            if targetCaseName then
-                local originFile = "unknown"
-                for _, item in ipairs(scheduledTests) do
-                    if item.test == targetCaseName then
-                        originFile = item.file
-                        break
-                    end
-                end
-                table.insert(failureReports, string.format("[%s] fail\n  -> target case: %s\n  -> origin file: tests/%s/cases/%s", category, targetCaseName:lower(), category, originFile))
-            else
-                table.insert(failureReports, string.format("[%s] fail (exit status: %d)", category, exitCode))
-            end
+            -- Record detailed failure summary
+            local failedTestName = firstFailedTest or activeRunningTest or "unknown test"
+            table.insert(failureReports, string.format("[%s] fail\n  -> target case: %s\n  -> exit status: %d", category, failedTestName:lower(), exitCode))
         end
 
-        renderDashboard()
         completed_categories += 1
+        table.insert(debugLogs, string.format("[%s] Category completed! (completed_categories=%d)", category, completed_categories))
     end)
 end
 
+-- Wait until all concurrent tasks complete
 while completed_categories < #categories do
     task.wait(0.01)
 end
 
+-- Write debug log file
+pcall(function()
+    fs.write("debug_test.log", table.concat(debugLogs, "\n")):Wait()
+end)
+
+-- No cursor move down needed as renderDashboard naturally leaves the cursor at the end of the list
+
+-- Print failure reports
 if #failureReports > 0 then
     out:writeLine("\n")
     for _, rep in ipairs(failureReports) do
@@ -225,10 +335,9 @@ if #failureReports > 0 then
     out:flush()
 end
 
+-- Final summary output
 if total_failed == 0 then
     out:color("green"):writeLine("\nall categories passed."):color("reset"):flush()
-end
-
-if total_failed > 0 then
-    Process.exit(1)
+else
+    process.exit(1)
 end

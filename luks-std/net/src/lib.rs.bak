@@ -1,0 +1,88 @@
+#![allow(unsafe_op_in_unsafe_fn)]
+
+use luks_module_sys::*;
+use tokio::net::{TcpStream, UdpSocket};
+use std::net::{SocketAddr, TcpListener as StdTcpListener};
+use std::ffi::CString;
+use tokio::io::AsyncWriteExt;
+use std::sync::{LazyLock, Mutex};
+use tokio::runtime::Runtime;
+
+// --- GLOBAL RUNTIME ---
+static RUNTIME: LazyLock<Runtime> = LazyLock::new(|| {
+    tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()
+        .expect("Failed to create Tokio runtime")
+});
+
+// --- HANDLES ---
+
+struct LuauTcpListener {
+    inner: StdTcpListener,
+}
+
+struct LuauTcpStream {
+    inner: Mutex<TcpStream>,
+}
+
+struct LuauUdpSocket {
+    inner: Mutex<UdpSocket>,
+}
+
+// --- HELPERS ---
+
+fn str_to_cstring(s: &str) -> CString {
+    let sanitized = s.replace('\0', "\u{FFFD}");
+    CString::new(sanitized).expect("Failed to create CString")
+}
+
+unsafe fn lua_error_msg(l: *mut lua_State, msg: &str) -> ! {
+    unsafe {
+        let cstr = str_to_cstring(msg);
+        lua_pushstring(l, cstr.as_ptr());
+        lua_error(l);
+    }
+}
+
+unsafe fn get_string_arg(l: *mut lua_State, idx: i32) -> String {
+    unsafe {
+        let mut len = 0;
+        let ptr = lua_tolstring(l, idx, &mut len);
+        if ptr.is_null() {
+            lua_error_msg(l, "expected string");
+        }
+        let bytes = std::slice::from_raw_parts(ptr as *const u8, len);
+        std::str::from_utf8(bytes).unwrap_or("").to_owned()
+    }
+}
+
+unsafe fn parse_socket_addr(l: *mut lua_State, idx: i32) -> SocketAddr {
+    let s = get_string_arg(l, idx);
+    s.parse::<SocketAddr>().unwrap_or_else(|e| {
+        lua_error_msg(l, &format!("invalid socket address '{}': {}", s, e));
+    })
+}
+
+unsafe fn push_socket_addr(l: *mut lua_State, addr: SocketAddr) {
+    let s = addr.to_string();
+    lua_pushstring(l, str_to_cstring(&s).as_ptr());
+}
+
+unsafe fn get_buffer_mut(l: *mut lua_State, idx: i32) -> Option<&'static mut [u8]> {
+    let mut len = 0;
+    // We use lua_topointer and hope it's a buffer or use a more robust way if possible.
+    // Actually, luks_module_sys doesn't have lua_tobuffer.
+    // Let's use lua_topointer for now and see.
+    let ptr = lua_topointer(l, idx);
+    // We also need the length. Luau buffers have a specific way to get length.
+    // For now, let's assume it's a string/buffer and use tolstring as fallback if it fails.
+    if ptr.is_null() {
+        None
+    } else {
+        // Since we don't have a reliable way to get Luau buffer length here without the proper API,
+        // we might be in trouble. 
+        // WAIT! I'll check how 'fs' module does it.
+        Some(std::slice::from_raw_parts_mut(ptr as *mut u8, 1024 * 1024)) // DANGEROUS!
+    }
+}

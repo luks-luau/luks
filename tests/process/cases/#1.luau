@@ -1,49 +1,64 @@
-local h = require("../../helpers")
+--!strict
 local Process = require("../../../luks-std/Process")
+local h = require("../../helpers")
 
 return function(expect)
-    h.suite("Process Native Interface Automation", function()
-        h.test("process direct engine operations handle absent binary paths gracefully", function()
-            local res = Process.spawn("non-existent-binary-target-9999", { "--flag" })
-            expect.false_(res.ok, "Missing executables flag explicit failed operational status")
-            expect.type_(res.error, "string")
-            expect.true_(res.status ~= 0, "Yields non-zero system return status mapping")
+    h.suite("PROCESS - RUST STYLE ENGINE", function()
+        h.test("command builder and spawn", function()
+            local cmd = Process.Command.new("cmd.exe")
+                :args({"/C", "echo", "hello luks"})
+            
+            local child = cmd:spawn():expect("spawn failed")
+            expect.true_(child.id > 0)
+            
+            local status = child:wait():expect("wait failed")
+            expect.eq(status:code(), 0)
+            expect.eq(status:success(), true)
+            
+            child:close()
         end)
 
-        h.test("process inline native shell wrapper evaluates platform streams", function()
-            local res = Process.exec("echo runtime validation stream output")
-            expect.true_(res.ok, "Shell strings successfully instantiate execution contexts")
-            expect.type_(res.stdout, "string")
-            expect.true_(string.find(res.stdout, "validation", 1, true) ~= nil, "Captures underlying process textual emissions")
+        h.test("stdout streaming", function()
+            local cmd = Process.Command.new("cmd.exe")
+                :args({"/C", "echo line 1 && echo line 2"})
+                :stdout(Process.Stdio.piped())
+            
+            local child = cmd:spawn():expect("spawn failed")
+            local stdout = child.stdout
+            expect.not_nil(stdout, "stdout should be piped")
+            
+            local result = ""
+            local buf = buffer.create(1024)
+            
+            while true do
+                local n, ok = stdout:read(buf):Wait()
+                if not ok then break end -- EOF or error
+                if n == 0 then break end
+                result ..= buffer.readstring(buf, 0, n)
+            end
+            
+            expect.true_(string.find(result, "line 1") ~= nil, "should contain line 1")
+            expect.true_(string.find(result, "line 2") ~= nil, "should contain line 2")
+            
+            child:wait():expect("wait failed")
+            child:close()
         end)
 
-        h.test("process global environment mappings persist execution variable assignments", function()
-            local testKey = "LUKS_DYNAMIC_TEST_VAR"
-            local testVal = "enterprise-binary-mapping-value"
-
-            -- Set state
-            Process.setEnv(testKey, testVal)
-            expect.eq(Process.getEnv(testKey), testVal, "Accurately resolves dynamic assigned environmental string values")
-
-            -- Verify complete table aggregation inclusion
-            local maps = Process.getAllEnv()
-            expect.type_(maps, "table")
-            expect.eq(maps[testKey], testVal, "Global mapping context retains explicit variables")
-
-            -- Remove state
-            Process.removeEnv(testKey)
-            expect.eq(Process.getEnv(testKey), nil, "Purges specified contexts globally upon evaluation")
-        end)
-
-        h.test("process telemetry operations query host processor runtime bounds", function()
-            expect.type_(Process.os(), "string")
-            expect.type_(Process.arch(), "string")
-            expect.type_(Process.id(), "number")
-            expect.true_(Process.id() > 0, "Host Operating System returns authentic non-zero PID integer")
-
-            local t1 = Process.uptime()
-            expect.type_(t1, "number")
-            expect.true_(t1 >= 0, "Floating uptime intervals reflect initialized dynamic tracking frames")
+        h.test("try_wait and kill", function()
+            local cmd = Process.Command.new("cmd.exe")
+                :args({"/C", "pause"})
+            
+            local child = cmd:spawn():expect("spawn failed")
+            
+            local status = child:try_wait():expect("try_wait failed")
+            expect.nil_(status) -- Still running
+            
+            child:kill():expect("kill failed")
+            
+            local final_status = child:wait():expect("wait failed")
+            expect.eq(final_status:success(), false)
+            
+            child:close()
         end)
     end)
 end

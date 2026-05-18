@@ -42,6 +42,10 @@ pub static HOST_LUAU_API: luks_module_sys::LuauAPI = luks_module_sys::LuauAPI {
     lua_tointegerx: mlua_sys::luau::lua_tointegerx,
     lua_toboolean: mlua_sys::luau::lua_toboolean,
     lua_topointer: mlua_sys::luau::lua_topointer,
+    lua_newuserdata: wrap_lua_newuserdata,
+    lua_tobuffer: wrap_lua_tobuffer,
+    lua_newbuffer: wrap_lua_newbuffer,
+    lua_pushlightuserdata: wrap_lua_pushlightuserdata,
 };
 
 unsafe extern "C-unwind" fn wrap_lua_pushstring(
@@ -57,6 +61,35 @@ unsafe extern "C-unwind" fn wrap_lua_pushcfunction(
     name: *const std::os::raw::c_char,
 ) {
     mlua_sys::luau::lua_pushcclosurek(l, f, name, 0, None);
+}
+
+unsafe extern "C-unwind" fn wrap_lua_newuserdata(
+    l: *mut mlua_sys::luau::lua_State,
+    size: usize,
+) -> *mut std::os::raw::c_void {
+    mlua_sys::luau::lua_newuserdata(l, size)
+}
+
+unsafe extern "C-unwind" fn wrap_lua_tobuffer(
+    l: *mut mlua_sys::luau::lua_State,
+    idx: i32,
+    len: *mut usize,
+) -> *mut std::os::raw::c_void {
+    mlua_sys::luau::lua_tobuffer(l, idx, len)
+}
+
+unsafe extern "C-unwind" fn wrap_lua_newbuffer(
+    l: *mut mlua_sys::luau::lua_State,
+    size: usize,
+) -> *mut std::os::raw::c_void {
+    mlua_sys::luau::lua_newbuffer(l, size)
+}
+
+unsafe extern "C-unwind" fn wrap_lua_pushlightuserdata(
+    l: *mut mlua_sys::luau::lua_State,
+    p: *mut std::os::raw::c_void,
+) {
+    mlua_sys::luau::lua_pushlightuserdata(l, p);
 }
 
 unsafe extern "C-unwind" fn wrap_lua_pushcclosurek(

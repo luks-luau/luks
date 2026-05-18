@@ -1,10 +1,17 @@
 [package]
-name = "process"
+name = "luks_process"
 version = "0.1.0"
-edition = "2024"
+edition = "2021"
 
 [lib]
 crate-type = ["cdylib"]
+name = "luks_process"
 
 [dependencies]
 luks-module-sys = { path = "../../crates/luks-module-sys" }
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.52", features = ["Win32_Storage_FileSystem", "Win32_System_Pipes", "Win32_Foundation", "Win32_System_IO"] }
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"

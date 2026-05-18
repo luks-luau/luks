@@ -1,90 +1,118 @@
-# Process Module
+# @luks/process
 
-The **Process** submodule implements a highly robust, multi-tier execution interface for the `luks-luau` environment. It enables native subprocess execution through both low-level explicit argument vectors and high-level platform shells, provides standard stream descriptor processing (`stdout`, `stderr`, `stdin`), inspects host processor telemetry, and controls runtime environmental variables synchronously and asynchronously.
+Production-grade asynchronous process management module for Luau, mirroring Rust's `std::process`.
 
 ## Features
 
-- **Direct Subprocess Operations**: Invoke executable targets directly bypassing intermediate shell evaluation structures (`Process.spawn`).
-- **Platform Shell Evaluation**: Wrap complex inline pipeline command logic automatically matching host operational kernels (`Process.exec`).
-- **Standard Input Feeding**: Pass input payload buffers directly into child pipeline input channels via the `stdin` configuration parameter.
-- **Environment Isolation**: Inherit host system context strings or enforce pure execution isolation layers using `env_clear`.
-- **Hardware Telemetry**: Query active host hardware compilation architectures (`Process.arch`) and running OS kernels (`Process.os`).
-- **Asynchronous Execution Loops**: Seamless background tasks powered by non-blocking event mechanisms (`Signal`) via `*Async` methods.
+- **Asynchronous Execution**: Spawn and manage subprocesses without blocking the Luau thread.
+- **Command Builder**: Fluent API for configuring program arguments, environment variables, and working directories.
+- **Streaming I/O**: Non-blocking `stdin`, `stdout`, and `stderr` pipes compatible with `IO.Reader` and `IO.Writer`.
+- **Lifecycle Management**: Explicit process killing, waiting, and exit status inspection.
+- **Resource Safety**: Handle-based architecture with explicit cleanup.
 
----
+## Installation
 
-## Path Resolution Semantics
+Add to your project via `luks` package manager (internal):
+```bash
+luks add luks-std/Process
+```
 
-The `Process` module integrates context-aware caller-based path resolution for executable targets and working directory configurations, establishing complete parity with `FileSystem` and native `require()` mechanics.
+## Basic Usage
 
-### Spawning Resolution Rules
+### Spawning a Process
+```luau
+local Process = require("luks-std/Process")
 
-1. **System `PATH` Programs**: Pure/bare commands containing no directory separators (e.g., `"git"`, `"luks"`, `"cargo"`) are preserved exactly as provided. This ensures standard host operating system lookups traverse environmental `PATH` variables correctly.
-2. **Context-Relative Targets**: Executable paths containing directory separators (`/` or `\`) or explicitly prefixed with `@self`, `./`, or `../` are automatically resolved relative to the physical file location of the script invoking the evaluation.
-3. **Working Directory Overrides (`options.cwd`)**: If a custom working directory string is provided via `options.cwd`, it is fully resolved contextually relative to the invoking script directory prior to launch.
+local cmd = Process.Command.new("echo")
+    :arg("Hello Luks!")
 
----
+local child = cmd:spawn():expect("Failed to spawn")
+local status = child:wait():expect("Wait failed")
+
+print("Exit Code:", status:code())
+child:close()
+```
+
+### Capturing Output (Piping)
+```luau
+local Process = require("luks-std/Process")
+
+local child = Process.Command.new("cmd.exe")
+    :args({"/C", "echo Line 1 && echo Line 2"})
+    :stdout(Process.Stdio.piped())
+    :spawn()
+    :expect("Spawn failed")
+
+local stdout = child.stdout
+local buf = buffer.create(1024)
+
+while true do
+    local n, ok = stdout:read(buf):Wait()
+    if not ok or n == 0 then break end
+    print(buffer.readstring(buf, 0, n))
+end
+
+child:wait():Wait()
+child:close()
+```
+
+### Piping Stdin
+```luau
+local Process = require("luks-std/Process")
+
+local child = Process.Command.new("sort")
+    :stdin(Process.Stdio.piped())
+    :stdout(Process.Stdio.piped())
+    :spawn()
+    :expect("Spawn failed")
+
+child.stdin:write("Zebra\nApple\nBanana"):Wait()
+child.stdin:close() -- Signal EOF to sort
+
+local result = ""
+local buf = buffer.create(1024)
+while true do
+    local n, ok = child.stdout:read(buf):Wait()
+    if not ok or n == 0 then break end
+    result ..= buffer.readstring(buf, 0, n)
+end
+
+print("Sorted output:", result)
+child:close()
+```
 
 ## API Reference
 
-### Spawning Subprocesses
+### `Process`
+- `Command`: The command builder module.
+- `Child`: The child process module.
+- `ExitStatus`: The exit status module.
+- `Stdio`: Stdio configuration constants.
+- `id() -> number`: Returns the current process ID.
+- `exit(code: number?)`: Exits the current process.
+- `abort()`: Aborts the current process immediately.
 
-#### `Process.spawn(program: string, args: {string}?, options: ProcessOptions?): ProcessOutput`
-Blocks the active Lua thread to execute the target application program binary directly.
+### `Command`
+- `new(program: string) -> Command`: Creates a new command.
+- `arg(arg: string) -> Command`: Adds an argument.
+- `args(args: {string}) -> Command`: Adds multiple arguments.
+- `cwd(path: string) -> Command`: Sets working directory.
+- `env(key: string, value: string) -> Command`: Sets an environment variable.
+- `env_clear() -> Command`: Clears all environment variables.
+- `stdin(cfg: StdioConfig) -> Command`: Sets stdin configuration.
+- `stdout(cfg: StdioConfig) -> Command`: Sets stdout configuration.
+- `stderr(cfg: StdioConfig) -> Command`: Sets stderr configuration.
+- `spawn() -> TaskFuture<Child>`: Spawns the process.
 
-```lua
-local res = Process.spawn("git", { "--version" })
-if res.ok then
-    print("Installed version:", res.stdout)
-end
-```
+### `Child`
+- `id: number`: Process ID.
+- `stdin: ChildStdin?`: Stdin pipe.
+- `stdout: ChildStdout?`: Stdout pipe.
+- `stderr: ChildStderr?`: Stderr pipe.
+- `wait() -> TaskFuture<ExitStatus>`: Waits for process to exit.
+- `try_wait() -> TaskFuture<ExitStatus?>`: Non-blocking check for exit.
+- `kill() -> TaskFuture<any>`: Kills the process.
+- `close()`: Closes handles and cleans up.
 
-#### `Process.exec(command: string, options: ProcessOptions?): ProcessOutput`
-Evaluates string expressions using standard underlying system shells (`cmd.exe /C` on Windows, `/bin/sh -c` on Unix platforms).
-
-```lua
--- Execute multi-part expressions
-local res = Process.exec("echo Interactive Shell Binding && whoami")
-print(res.status, res.stdout)
-```
-
-### Feeding Data into Standard Input
-
-Inject pipeline structures programmatically via `stdin`:
-
-```lua
-local res = Process.spawn("cat", {}, {
-    stdin = "Injected binary stream buffers matching pipe logic.",
-})
-print(res.stdout)
-```
-
-### Asynchronous Execution Variants
-
-Non-blocking calls execute processes inside native thread spawn queues, firing asynchronous event handlers (`Signal`):
-
-```lua
-local signal = Process.spawnAsync("sleep", { "2" })
-signal:Connect(function(out)
-    print("Background execution finished with return code:", out.status)
-end)
-```
-
-### Managing Environment & Telemetry
-
-```lua
--- Inspect compilation environments
-print("Host OS:", Process.os())
-print("Host CPU Arch:", Process.arch())
-print("Host PID:", Process.id())
-
--- Access runtime maps
-Process.setEnv("LUKS_TARGET_MODE", "flexibility")
-print(Process.getEnv("LUKS_TARGET_MODE"))
-
--- Extract complete state contexts
-local maps = Process.getAllEnv()
-for k, v in pairs(maps) do
-    print(k, "->", v)
-end
-```
+## License
+MIT
