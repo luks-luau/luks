@@ -11,7 +11,7 @@
         local ok, err = pcall(WebSocket.connect, "wss://...")
 ]]
 
-local Signal = require("@self/../Signal")
+local Signal = require("@self/../signal")
 
 local SafeLoadNative = function(path: string)
     local success, native = pcall(dlopen, path)

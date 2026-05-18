@@ -12,7 +12,7 @@
     response arrives, running the request inside `task.defer`.
 ]]
 
-local Signal = require("@self/../Signal")
+local Signal = require("@self/../signal")
 
 local SafeLoadNative = function(path: string)
     local success, native = pcall(dlopen, path)

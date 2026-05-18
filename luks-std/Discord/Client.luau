@@ -6,7 +6,7 @@
     Client Namespace — Base Object-Oriented Application orchestrator for luks-std/Discord.
 ]]
 
-local Signal = require("@self/../Signal")
+local Signal = require("@self/../signal")
 local Rest = require("@self/Rest")
 local Gateway = require("@self/Gateway")
 local Channel = require("@self/Structures/Channel")
