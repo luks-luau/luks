@@ -1,6 +1,8 @@
 #![allow(unsafe_op_in_unsafe_fn)]
 #![allow(non_snake_case)]
 #![allow(clippy::upper_case_acronyms)]
+#![allow(dead_code)]
+#![allow(clippy::missing_safety_doc)]
 
 use luks_module_sys::*;
 use std::fs::File;
@@ -176,7 +178,12 @@ mod win32 {
         pub fn EnumDisplayMonitors(
             hdc: *mut c_void,
             lprcClip: *mut c_void,
-            lpEnumFunc: unsafe extern "system" fn(*mut c_void, *mut c_void, *mut RECT, isize) -> i32,
+            lpEnumFunc: unsafe extern "system" fn(
+                *mut c_void,
+                *mut c_void,
+                *mut RECT,
+                isize,
+            ) -> i32,
             dwData: isize,
         ) -> i32;
         pub fn GetWindowLongA(hWnd: *mut c_void, nIndex: i32) -> i32;
@@ -256,7 +263,8 @@ mod win32 {
                 std::ptr::null_mut(),
             );
             if len > 0 && !buf_ptr.is_null() {
-                let msg = String::from_utf16_lossy(std::slice::from_raw_parts(buf_ptr, len as usize));
+                let msg =
+                    String::from_utf16_lossy(std::slice::from_raw_parts(buf_ptr, len as usize));
                 let _ = GlobalFree(buf_ptr as *mut c_void);
                 msg.trim().to_string()
             } else {
@@ -471,7 +479,7 @@ mod win32 {
             if color == 0xFFFFFFFF {
                 return None;
             }
-            let r = (color >> 0) as u8;
+            let r = color as u8;
             let g = (color >> 8) as u8;
             let b = (color >> 16) as u8;
             let a = 0xFF;
@@ -491,9 +499,8 @@ mod win32 {
         ) -> i32 {
             let ctx = &mut *(lparam as *mut MonContext);
             let r = &*rect;
-            ctx.monitors.push((
-                r.left, r.top, r.right - r.left, r.bottom - r.top, false,
-            ));
+            ctx.monitors
+                .push((r.left, r.top, r.right - r.left, r.bottom - r.top, false));
             1
         }
         let mut ctx = MonContext {
@@ -844,7 +851,11 @@ mod win32 {
             if enabled {
                 SetWindowLongA(hwnd, GWL_EXSTYLE, style | WS_EX_LAYERED | WS_EX_TRANSPARENT);
             } else {
-                SetWindowLongA(hwnd, GWL_EXSTYLE, style & !(WS_EX_LAYERED | WS_EX_TRANSPARENT));
+                SetWindowLongA(
+                    hwnd,
+                    GWL_EXSTYLE,
+                    style & !(WS_EX_LAYERED | WS_EX_TRANSPARENT),
+                );
             }
             true
         }
@@ -916,7 +927,13 @@ mod win32 {
     pub fn get_window_geometry_raw(_hwnd: *mut std::ffi::c_void) -> (i32, i32, i32, i32) {
         (0, 0, 0, 0)
     }
-    pub fn set_window_geometry_raw(_hwnd: *mut std::ffi::c_void, _x: i32, _y: i32, _w: i32, _h: i32) -> bool {
+    pub fn set_window_geometry_raw(
+        _hwnd: *mut std::ffi::c_void,
+        _x: i32,
+        _y: i32,
+        _w: i32,
+        _h: i32,
+    ) -> bool {
         false
     }
     pub fn is_window_minimized_raw(_hwnd: *mut std::ffi::c_void) -> bool {
@@ -1031,7 +1048,10 @@ fn save_bmp(path: &str, width: u32, height: u32, pixels: &[u32]) -> std::io::Res
 fn load_bmp(path: &str) -> std::io::Result<(u32, u32, Vec<u32>)> {
     let bytes = std::fs::read(path)?;
     if bytes.len() < 54 || &bytes[0..2] != b"BM" {
-        return Err(std::io::Error::new(std::io::ErrorKind::InvalidData, "Invalid BMP file"));
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "Invalid BMP file",
+        ));
     }
 
     let off_bits = u32::from_le_bytes(bytes[10..14].try_into().unwrap()) as usize;
@@ -1040,7 +1060,10 @@ fn load_bmp(path: &str) -> std::io::Result<(u32, u32, Vec<u32>)> {
     let bit_count = u16::from_le_bytes(bytes[28..30].try_into().unwrap());
 
     if bit_count != 24 && bit_count != 32 {
-        return Err(std::io::Error::new(std::io::ErrorKind::InvalidData, "Only 24-bit and 32-bit BMPs supported"));
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "Only 24-bit and 32-bit BMPs supported",
+        ));
     }
 
     let w = width.unsigned_abs();
@@ -1061,7 +1084,8 @@ fn load_bmp(path: &str) -> std::io::Result<(u32, u32, Vec<u32>)> {
                     let b = bytes[o];
                     let g = bytes[o + 1];
                     let r = bytes[o + 2];
-                    pixels[pixel_idx] = 0xFF000000 | ((r as u32) << 16) | ((g as u32) << 8) | (b as u32);
+                    pixels[pixel_idx] =
+                        0xFF000000 | ((r as u32) << 16) | ((g as u32) << 8) | (b as u32);
                 }
             } else {
                 let o = row_offset + (x as usize * 4);
@@ -1070,7 +1094,8 @@ fn load_bmp(path: &str) -> std::io::Result<(u32, u32, Vec<u32>)> {
                     let g = bytes[o + 1];
                     let r = bytes[o + 2];
                     let a = bytes[o + 3];
-                    pixels[pixel_idx] = ((a as u32) << 24) | ((r as u32) << 16) | ((g as u32) << 8) | (b as u32);
+                    pixels[pixel_idx] =
+                        ((a as u32) << 24) | ((r as u32) << 16) | ((g as u32) << 8) | (b as u32);
                 }
             }
         }
@@ -1123,9 +1148,14 @@ unsafe extern "C-unwind" fn lua_mouse_click(l: *mut lua_State) -> i32 {
     let button_ptr = lua_tostring(l, 1);
     let down = lua_toboolean(l, 2) != 0;
     if button_ptr.is_null() {
-        lua_error_msg(l, "mouse_click: button argument is required (LEFT/RIGHT/MIDDLE)");
+        lua_error_msg(
+            l,
+            "mouse_click: button argument is required (LEFT/RIGHT/MIDDLE)",
+        );
     }
-    let button = std::ffi::CStr::from_ptr(button_ptr).to_str().unwrap_or("LEFT");
+    let button = std::ffi::CStr::from_ptr(button_ptr)
+        .to_str()
+        .unwrap_or("LEFT");
     if let Err(e) = win32::mouse_click_raw(button, down) {
         lua_error_msg(l, e);
     }
@@ -1200,9 +1230,14 @@ unsafe extern "C-unwind" fn lua_save_screenshot(l: *mut lua_State) -> i32 {
 }
 
 unsafe extern "C-unwind" fn lua_capture_screenshot(l: *mut lua_State) -> i32 {
-    match win32::capture_screen_raw(0, 0, win32::get_screen_size_raw().0, win32::get_screen_size_raw().1) {
+    match win32::capture_screen_raw(
+        0,
+        0,
+        win32::get_screen_size_raw().0,
+        win32::get_screen_size_raw().1,
+    ) {
         Some((w, h, pixels)) => {
-            let buf = lua_newbuffer(l, (pixels.len() * 4) as usize);
+            let buf = lua_newbuffer(l, pixels.len() * 4);
             let buf_slice = std::slice::from_raw_parts_mut(buf as *mut u32, pixels.len());
             buf_slice.copy_from_slice(&pixels);
             lua_pushinteger(l, w as i64);
@@ -1224,7 +1259,10 @@ unsafe extern "C-unwind" fn lua_get_pixel(l: *mut lua_State) -> i32 {
             lua_pushinteger(l, a as i64);
             4
         }
-        None => lua_error_msg(l, &format!("get_pixel: failed to read pixel at ({}, {})", x, y)),
+        None => lua_error_msg(
+            l,
+            &format!("get_pixel: failed to read pixel at ({}, {})", x, y),
+        ),
     }
 }
 
@@ -1283,7 +1321,11 @@ unsafe extern "C-unwind" fn lua_prepare_template_from_file(l: *mut lua_State) ->
     match load_bmp(path) {
         Ok((w, h, pixels)) => {
             if let Ok(mut tmpl) = TEMPLATE.lock() {
-                *tmpl = Some(Template { width: w, height: h, pixels });
+                *tmpl = Some(Template {
+                    width: w,
+                    height: h,
+                    pixels,
+                });
             }
             0
         }
@@ -1298,10 +1340,15 @@ unsafe extern "C-unwind" fn lua_find_image_on_screen(l: *mut lua_State) -> i32 {
     let search_w = lua_tointeger(l, 4) as i32;
     let search_h = lua_tointeger(l, 5) as i32;
 
-    let tmpl_guard = TEMPLATE.lock().unwrap_or_else(|_| lua_error_msg(l, "find_image_on_screen: internal mutex error"));
+    let tmpl_guard = TEMPLATE
+        .lock()
+        .unwrap_or_else(|_| lua_error_msg(l, "find_image_on_screen: internal mutex error"));
     let tmpl = match &*tmpl_guard {
         Some(t) => t,
-        None => lua_error_msg(l, "find_image_on_screen: no template loaded, call prepare_template_from_file first"),
+        None => lua_error_msg(
+            l,
+            "find_image_on_screen: no template loaded, call prepare_template_from_file first",
+        ),
     };
 
     let (screen_w, screen_h) = win32::get_screen_size_raw();
@@ -1339,14 +1386,18 @@ unsafe extern "C-unwind" fn lua_find_image_on_screen(l: *mut lua_State) -> i32 {
                         let mut tx = 0;
                         while tx < tmpl.width {
                             let tmpl_pixel = tmpl.pixels[(ty * tmpl.width + tx) as usize];
-                            let screen_pixel = screen_pixels[((y + ty) * cap_w + (x + tx)) as usize];
+                            let screen_pixel =
+                                screen_pixels[((y + ty) * cap_w + (x + tx)) as usize];
                             let tr = (tmpl_pixel >> 16) & 0xFF;
                             let tg = (tmpl_pixel >> 8) & 0xFF;
                             let tb = tmpl_pixel & 0xFF;
                             let sr = (screen_pixel >> 16) & 0xFF;
                             let sg = (screen_pixel >> 8) & 0xFF;
                             let sb = screen_pixel & 0xFF;
-                            if tr.abs_diff(sr) <= 15 && tg.abs_diff(sg) <= 15 && tb.abs_diff(sb) <= 15 {
+                            if tr.abs_diff(sr) <= 15
+                                && tg.abs_diff(sg) <= 15
+                                && tb.abs_diff(sb) <= 15
+                            {
                                 match_count += 1;
                             } else {
                                 mismatch_count += 1;
@@ -1364,7 +1415,8 @@ unsafe extern "C-unwind" fn lua_find_image_on_screen(l: *mut lua_State) -> i32 {
                     }
 
                     if !aborted {
-                        let score = match_count as f32 / ((tmpl.width * tmpl.height) / (step * step)) as f32;
+                        let score = match_count as f32
+                            / ((tmpl.width * tmpl.height) / (step * step)) as f32;
                         if score >= threshold && score > best_score {
                             best_score = score;
                             best_x = x;
@@ -1485,7 +1537,14 @@ unsafe extern "C-unwind" fn lua_minimize_window(l: *mut lua_State) -> i32 {
         lua_pushboolean(l, 0);
         return 1;
     }
-    lua_pushboolean(l, if win32::minimize_window_raw(hwnd) { 1 } else { 0 });
+    lua_pushboolean(
+        l,
+        if win32::minimize_window_raw(hwnd) {
+            1
+        } else {
+            0
+        },
+    );
     1
 }
 
@@ -1495,7 +1554,14 @@ unsafe extern "C-unwind" fn lua_maximize_window(l: *mut lua_State) -> i32 {
         lua_pushboolean(l, 0);
         return 1;
     }
-    lua_pushboolean(l, if win32::maximize_window_raw(hwnd) { 1 } else { 0 });
+    lua_pushboolean(
+        l,
+        if win32::maximize_window_raw(hwnd) {
+            1
+        } else {
+            0
+        },
+    );
     1
 }
 
@@ -1505,7 +1571,14 @@ unsafe extern "C-unwind" fn lua_restore_window(l: *mut lua_State) -> i32 {
         lua_pushboolean(l, 0);
         return 1;
     }
-    lua_pushboolean(l, if win32::restore_window_raw(hwnd) { 1 } else { 0 });
+    lua_pushboolean(
+        l,
+        if win32::restore_window_raw(hwnd) {
+            1
+        } else {
+            0
+        },
+    );
     1
 }
 
@@ -1532,7 +1605,14 @@ unsafe extern "C-unwind" fn lua_set_window_geometry(l: *mut lua_State) -> i32 {
         lua_pushboolean(l, 0);
         return 1;
     }
-    lua_pushboolean(l, if win32::set_window_geometry_raw(hwnd, x, y, w, h) { 1 } else { 0 });
+    lua_pushboolean(
+        l,
+        if win32::set_window_geometry_raw(hwnd, x, y, w, h) {
+            1
+        } else {
+            0
+        },
+    );
     1
 }
 
@@ -1542,7 +1622,14 @@ unsafe extern "C-unwind" fn lua_is_window_minimized(l: *mut lua_State) -> i32 {
         lua_pushboolean(l, 0);
         return 1;
     }
-    lua_pushboolean(l, if win32::is_window_minimized_raw(hwnd) { 1 } else { 0 });
+    lua_pushboolean(
+        l,
+        if win32::is_window_minimized_raw(hwnd) {
+            1
+        } else {
+            0
+        },
+    );
     1
 }
 
@@ -1552,7 +1639,14 @@ unsafe extern "C-unwind" fn lua_is_window_maximized(l: *mut lua_State) -> i32 {
         lua_pushboolean(l, 0);
         return 1;
     }
-    lua_pushboolean(l, if win32::is_window_maximized_raw(hwnd) { 1 } else { 0 });
+    lua_pushboolean(
+        l,
+        if win32::is_window_maximized_raw(hwnd) {
+            1
+        } else {
+            0
+        },
+    );
     1
 }
 
@@ -1562,7 +1656,14 @@ unsafe extern "C-unwind" fn lua_is_window_visible(l: *mut lua_State) -> i32 {
         lua_pushboolean(l, 0);
         return 1;
     }
-    lua_pushboolean(l, if win32::is_window_visible_raw(hwnd) { 1 } else { 0 });
+    lua_pushboolean(
+        l,
+        if win32::is_window_visible_raw(hwnd) {
+            1
+        } else {
+            0
+        },
+    );
     1
 }
 
@@ -1583,7 +1684,14 @@ unsafe extern "C-unwind" fn lua_window_set_transparency(l: *mut lua_State) -> i3
         lua_pushboolean(l, 0);
         return 1;
     }
-    lua_pushboolean(l, if win32::window_set_transparency_raw(hwnd, alpha) { 1 } else { 0 });
+    lua_pushboolean(
+        l,
+        if win32::window_set_transparency_raw(hwnd, alpha) {
+            1
+        } else {
+            0
+        },
+    );
     1
 }
 
@@ -1594,7 +1702,14 @@ unsafe extern "C-unwind" fn lua_window_set_click_through(l: *mut lua_State) -> i
         lua_pushboolean(l, 0);
         return 1;
     }
-    lua_pushboolean(l, if win32::window_set_click_through_raw(hwnd, enabled) { 1 } else { 0 });
+    lua_pushboolean(
+        l,
+        if win32::window_set_click_through_raw(hwnd, enabled) {
+            1
+        } else {
+            0
+        },
+    );
     1
 }
 
