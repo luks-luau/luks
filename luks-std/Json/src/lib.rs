@@ -1,8 +1,7 @@
 #![allow(unsafe_op_in_unsafe_fn)]
 
 use luks_module_sys::*;
-use std::ffi::{CStr, CString};
-use std::ptr;
+use std::ffi::CString;
 
 /// Helper to convert a Rust string to CString, replacing null bytes with U+FFFD
 fn str_to_cstring(s: &str) -> CString {
@@ -50,11 +49,13 @@ unsafe fn lua_value_to_json(
                 }
             }
             LUA_TSTRING => {
-                let s = lua_tolstring(l, idx, ptr::null_mut());
+                let mut slen: usize = 0;
+                let s = lua_tolstring(l, idx, &mut slen);
                 if s.is_null() {
                     serde_json::Value::Null
                 } else {
-                    let rust_str = CStr::from_ptr(s).to_string_lossy().into_owned();
+                    let bytes = std::slice::from_raw_parts(s as *const u8, slen);
+                    let rust_str = String::from_utf8_lossy(bytes).into_owned();
                     serde_json::Value::String(rust_str)
                 }
             }
@@ -109,12 +110,15 @@ unsafe fn lua_value_to_json(
                     while lua_next(l, idx) != 0 {
                         let key_type = lua_type(l, -2);
                         let key = if key_type == LUA_TSTRING {
-                            let key_str = lua_tolstring(l, -2, ptr::null_mut());
+                            let mut key_len: usize = 0;
+                            let key_str = lua_tolstring(l, -2, &mut key_len);
                             if key_str.is_null() {
                                 lua_pop(l, 1);
                                 continue;
                             }
-                            CStr::from_ptr(key_str).to_string_lossy().into_owned()
+                            let key_bytes =
+                                std::slice::from_raw_parts(key_str as *const u8, key_len);
+                            String::from_utf8_lossy(key_bytes).into_owned()
                         } else if key_type == LUA_TNUMBER {
                             let key_num = lua_tonumber(l, -2);
                             format!("{}", key_num)
@@ -161,8 +165,7 @@ unsafe fn json_value_to_lua(l: *mut lua_State, value: &serde_json::Value) {
                 }
             }
             serde_json::Value::String(s) => {
-                let cstr = str_to_cstring(s.as_str());
-                lua_pushstring(l, cstr.as_ptr());
+                lua_pushlstring(l, s.as_ptr() as *const i8, s.len());
             }
             serde_json::Value::Array(arr) => {
                 lua_createtable(l, 0, arr.len().max(1) as i32);
@@ -177,8 +180,7 @@ unsafe fn json_value_to_lua(l: *mut lua_State, value: &serde_json::Value) {
                 lua_createtable(l, 0, obj.len().max(1) as i32);
                 let table_idx = lua_absindex(l, -1);
                 for (k, v) in obj {
-                    let key_cstr = str_to_cstring(k.as_str());
-                    lua_pushstring(l, key_cstr.as_ptr());
+                    lua_pushlstring(l, k.as_ptr() as *const i8, k.len());
                     json_value_to_lua(l, v);
                     lua_settable(l, table_idx);
                 }
@@ -218,12 +220,14 @@ unsafe extern "C-unwind" fn lua_decode(l: *mut lua_State) -> i32 {
             lua_error_msg(l, "JSON decode error: expected at least 1 argument");
         }
 
-        let json_str = lua_tolstring(l, 1, ptr::null_mut());
+        let mut json_len: usize = 0;
+        let json_str = lua_tolstring(l, 1, &mut json_len);
         if json_str.is_null() {
             lua_error_msg(l, "JSON decode error: expected string argument");
         }
 
-        let json_str = CStr::from_ptr(json_str).to_string_lossy().into_owned();
+        let json_bytes = std::slice::from_raw_parts(json_str as *const u8, json_len);
+        let json_str = String::from_utf8_lossy(json_bytes).into_owned();
         match serde_json::from_str::<serde_json::Value>(&json_str) {
             Ok(value) => {
                 json_value_to_lua(l, &value);
