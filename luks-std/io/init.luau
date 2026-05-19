@@ -20,11 +20,11 @@ export type BufRead = types.BufRead
     NATIVE INTERFACE TYPE
 ---------------------------------------------------------------------------- ]]
 type NativeAPI = {
-    stdin_read: (buf: buffer, offset: number, len: number) -> (number?, string?),
-    stdout_write: (buf: buffer | string, offset: number, len: number) -> (number?, string?),
-    stdout_flush: () -> (),
-    stderr_write: (buf: buffer | string, offset: number, len: number) -> (number?, string?),
-    stderr_flush: () -> (),
+    stdin_read: (buf: buffer, offset: number, len: number) -> number,
+    stdout_write: (buf: buffer | string, offset: number, len: number) -> number,
+    stdout_flush: () -> boolean,
+    stderr_write: (buf: buffer | string, offset: number, len: number) -> number,
+    stderr_flush: () -> boolean,
 }
 
 --[[ ---------------------------------------------------------------------------
@@ -90,8 +90,8 @@ function IO.stdin(): Reader
     function obj:read(buf: buffer, offset: number?, len: number?)
         local future, resolve, reject = Async.new_future()
         task.defer(function()
-            local n, err = native.stdin_read(buf, offset or 0, len or 0)
-            if n then resolve(n) else reject({ kind = "IoError", message = err or "unknown error" } :: IoError) end
+            local ok, n = pcall(native.stdin_read, buf, offset or 0, len or 0)
+            if ok then resolve(n) else reject({ kind = "IoError", message = tostring(n) } :: IoError) end
         end)
         return future
     end
@@ -99,19 +99,23 @@ function IO.stdin(): Reader
     function obj:read_to_end()
         local future, resolve, reject = Async.new_future()
         task.spawn(function()
-            local res = buffer.create(0)
-            local tmp = buffer.create(8192)
-            while true do
-                local n, ok = (self :: Reader):read(tmp):Wait()
-                if not ok then reject(n :: any); return end
-                if n == 0 then break end
-                local num: number = n :: number
-                local new_res = buffer.create(buffer.len(res) + num)
-                buffer.copy(new_res, 0, res)
-                buffer.copy(new_res, buffer.len(res), tmp, 0, num)
-                res = new_res
-            end
-            resolve(res)
+            local ok, err = pcall(function()
+                local res = buffer.create(0)
+                local tmp = buffer.create(8192)
+                while true do
+                    local n, ok_ = (self :: Reader):read(tmp):Wait()
+                    if not ok_ then reject(n :: any); return nil end
+                    if n == 0 then break end
+                    local num: number = n :: number
+                    local new_res = buffer.create(buffer.len(res) + num)
+                    buffer.copy(new_res, 0, res)
+                    buffer.copy(new_res, buffer.len(res), tmp, 0, num)
+                    res = new_res
+                end
+                resolve(res)
+                return nil
+            end)
+            if not ok then reject({ kind = "InternalError", message = tostring(err) } :: IoError) end
         end)
         return future
     end
@@ -123,17 +127,21 @@ function IO.stdin(): Reader
     function obj:read_exact(buf: buffer, len: number)
         local future, resolve, reject = Async.new_future()
         task.spawn(function()
-            local total = 0
-            while total < len do
-                local n, ok = (self :: Reader):read(buf, total, len - total):Wait()
-                if not ok then reject(n :: any); return end
-                if n == 0 then
-                    reject({ kind = "UnexpectedEof", message = "failed to fill whole buffer" } :: IoError)
-                    return
+            local ok, err = pcall(function()
+                local total = 0
+                while total < len do
+                    local n, ok_ = (self :: Reader):read(buf, total, len - total):Wait()
+                    if not ok_ then reject(n :: any); return nil end
+                    if n == 0 then
+                        reject({ kind = "UnexpectedEof", message = "failed to fill whole buffer" } :: IoError)
+                        return nil
+                    end
+                    total += n :: number
                 end
-                total += n :: number
-            end
-            resolve(nil)
+                resolve(nil)
+                return nil
+            end)
+            if not ok then reject({ kind = "InternalError", message = tostring(err) } :: IoError) end
         end)
         return future
     end
@@ -154,8 +162,8 @@ function IO.stdout(): Writer
     function obj:write(buf: buffer | string, offset: number?, len: number?)
         local future, resolve, reject = Async.new_future()
         task.defer(function()
-            local n, err = native.stdout_write(buf, offset or 0, len or 0)
-            if n then resolve(n) else reject({ kind = "IoError", message = err or "unknown error" } :: IoError) end
+            local ok, n = pcall(native.stdout_write, buf, offset or 0, len or 0)
+            if ok then resolve(n) else reject({ kind = "IoError", message = tostring(n) } :: IoError) end
         end)
         return future
     end
@@ -163,26 +171,32 @@ function IO.stdout(): Writer
     function obj:write_all(buf: buffer | string)
         local future, resolve, reject = Async.new_future()
         task.spawn(function()
-            local total = 0
-            local len = if type(buf) == "string" then #buf else buffer.len(buf)
-            while total < len do
-                local n, ok = (self :: Writer):write(buf, total, len - total):Wait()
-                if not ok then reject(n :: any); return end
-                if n == 0 then
-                    reject({ kind = "WriteZero", message = "failed to write whole buffer" } :: IoError)
-                    return
+            local ok, err = pcall(function()
+                local total = 0
+                local len = if type(buf) == "string" then #buf else buffer.len(buf)
+                while total < len do
+                    local n, ok_ = (self :: Writer):write(buf, total, len - total):Wait()
+                    if not ok_ then reject(n :: any); return nil end
+                    if n == 0 then
+                        reject({ kind = "WriteZero", message = "failed to write whole buffer" } :: IoError)
+                        return nil
+                    end
+                    total += n :: number
                 end
-                total += n :: number
-            end
-            resolve(nil)
+                resolve(nil)
+                return nil
+            end)
+            if not ok then reject({ kind = "InternalError", message = tostring(err) } :: IoError) end
         end)
         return future
     end
     
     function obj:flush()
-        local future, resolve, _ = Async.new_future()
-        native.stdout_flush()
-        resolve(nil)
+        local future, resolve, reject = Async.new_future()
+        task.defer(function()
+            local ok, result = pcall(native.stdout_flush)
+            if ok then resolve(nil) else reject({ kind = "IoError", message = tostring(result) } :: IoError) end
+        end)
         return future
     end
     
@@ -199,31 +213,37 @@ function IO.stderr(): Writer
     function obj:write(buf: buffer | string, offset: number?, len: number?)
         local future, resolve, reject = Async.new_future()
         task.defer(function()
-            local n, err = native.stderr_write(buf, offset or 0, len or 0)
-            if n then resolve(n) else reject({ kind = "IoError", message = err or "unknown error" } :: IoError) end
+            local ok, n = pcall(native.stderr_write, buf, offset or 0, len or 0)
+            if ok then resolve(n) else reject({ kind = "IoError", message = tostring(n) } :: IoError) end
         end)
         return future
     end
-    
+
     function obj:write_all(buf: buffer | string)
         local future, resolve, reject = Async.new_future()
         task.spawn(function()
-            local total = 0
-            local len = if type(buf) == "string" then #buf else buffer.len(buf)
-            while total < len do
-                local n, ok = (self :: Writer):write(buf, total, len - total):Wait()
-                if not ok then reject(n :: any); return end
-                total += n :: number
-            end
-            resolve(nil)
+            local ok, err = pcall(function()
+                local total = 0
+                local len = if type(buf) == "string" then #buf else buffer.len(buf)
+                while total < len do
+                    local n, ok_ = (self :: Writer):write(buf, total, len - total):Wait()
+                    if not ok_ then reject(n :: any); return nil end
+                    total += n :: number
+                end
+                resolve(nil)
+                return nil
+            end)
+            if not ok then reject({ kind = "InternalError", message = tostring(err) } :: IoError) end
         end)
         return future
     end
     
     function obj:flush()
-        local future, resolve, _ = Async.new_future()
-        native.stderr_flush()
-        resolve(nil)
+        local future, resolve, reject = Async.new_future()
+        task.defer(function()
+            local ok, result = pcall(native.stderr_flush)
+            if ok then resolve(nil) else reject({ kind = "IoError", message = tostring(result) } :: IoError) end
+        end)
         return future
     end
     
@@ -243,18 +263,22 @@ end
 function IO.copy(reader: Reader, writer: Writer): Async.TaskFuture<number>
     local future, resolve, reject = Async.new_future()
     task.spawn(function()
-        local total = 0
-        local buf = buffer.create(8192)
-        while true do
-            local n, ok = reader:read(buf):Wait()
-            if not ok then reject(n :: any); return end
-            if n == 0 then break end
-            local num: number = n :: number
-            local err, w_ok = writer:write_all(buffer.tostring(buf):sub(1, num)):Wait()
-            if not w_ok then reject(err :: any); return end
-            total += num
-        end
-        resolve(total)
+        local ok, err = pcall(function()
+            local total = 0
+            local buf = buffer.create(8192)
+            while true do
+                local n, ok_ = reader:read(buf):Wait()
+                if not ok_ then reject(n :: any); return nil end
+                if n == 0 then break end
+                local num: number = n :: number
+                local err_, w_ok = writer:write_all(buffer.tostring(buf):sub(1, num)):Wait()
+                if not w_ok then reject(err_ :: any); return nil end
+                total += num
+            end
+            resolve(total)
+            return nil
+        end)
+        if not ok then reject({ kind = "InternalError", message = tostring(err) } :: IoError) end
     end)
     return future
 end

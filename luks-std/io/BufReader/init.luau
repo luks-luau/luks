@@ -167,46 +167,49 @@ function BufReaderMT:read_until(byte: number): Async.TaskFuture<buffer?>
     local this: Self = self :: any
     local target = byte % 256
     local future, resolve, reject = Async.new_future()
-    local res_buf = buffer.create(0)
-    
-    local function process()
-        (self :: BufRead):fill_buf():and_then(function(_): any
-            local n = this._cap - this._pos
-            if n == 0 then 
-                resolve(if buffer.len(res_buf) == 0 then nil else res_buf)
-                return nil
-            end
-            
-            local found_idx = -1
-            for i = this._pos, this._cap - 1 do
-                if buffer.readu8(this._buf, i) == target then
-                    found_idx = i
-                    break
+    task.spawn(function()
+        local ok, err = pcall(function()
+            local res_buf = buffer.create(0)
+            while true do
+                local fill_err, fill_ok = (self :: BufRead):fill_buf():Wait()
+                if not fill_ok then reject(fill_err :: any); return nil end
+
+                local n = this._cap - this._pos
+                if n == 0 then
+                    resolve(if buffer.len(res_buf) == 0 then nil else res_buf)
+                    return nil
+                end
+
+                local found_idx = -1
+                for i = this._pos, this._cap - 1 do
+                    if buffer.readu8(this._buf, i) == target then
+                        found_idx = i
+                        break
+                    end
+                end
+
+                if found_idx ~= -1 then
+                    local chunk_len = found_idx - this._pos + 1
+                    local new_res = buffer.create(buffer.len(res_buf) + chunk_len)
+                    buffer.copy(new_res, 0, res_buf)
+                    buffer.copy(new_res, buffer.len(res_buf), this._buf, this._pos, chunk_len)
+                    res_buf = new_res;
+                    (self :: BufRead):consume(chunk_len)
+                    resolve(res_buf)
+                    return nil
+                else
+                    local chunk_len = this._cap - this._pos
+                    local new_res = buffer.create(buffer.len(res_buf) + chunk_len)
+                    buffer.copy(new_res, 0, res_buf)
+                    buffer.copy(new_res, buffer.len(res_buf), this._buf, this._pos, chunk_len)
+                    res_buf = new_res;
+                    (self :: BufRead):consume(chunk_len)
                 end
             end
-            
-            if found_idx ~= -1 then
-                local chunk_len = found_idx - this._pos + 1
-                local new_res = buffer.create(buffer.len(res_buf) + chunk_len)
-                buffer.copy(new_res, 0, res_buf)
-                buffer.copy(new_res, buffer.len(res_buf), this._buf, this._pos, chunk_len)
-                res_buf = new_res;
-                (self :: BufRead):consume(chunk_len)
-                resolve(res_buf)
-                return nil
-            else
-                local chunk_len = this._cap - this._pos
-                local new_res = buffer.create(buffer.len(res_buf) + chunk_len)
-                buffer.copy(new_res, 0, res_buf)
-                buffer.copy(new_res, buffer.len(res_buf), this._buf, this._pos, chunk_len)
-                res_buf = new_res;
-                (self :: BufRead):consume(chunk_len)
-                process()
-                return nil
-            end
-        end):inspect_err(reject)
-    end
-    process()
+            return nil
+        end)
+        if not ok then reject({ kind = "InternalError", message = tostring(err) } :: IoError) end
+    end)
     return future
 end
 
@@ -227,9 +230,11 @@ end
     @return An iterator function returning strings
 ]]
 function BufReaderMT:lines(): () -> string?
+    local errored = false
     return function()
+        if errored then return nil end
         local line, ok = (self :: BufRead):read_line():Wait()
-        if not ok then error(tostring(line)) end
+        if not ok then errored = true; return nil end
         return line
     end
 end

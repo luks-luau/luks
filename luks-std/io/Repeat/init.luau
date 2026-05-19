@@ -47,14 +47,14 @@ end
     Always errors, as Repeat is an infinite source.
 ]]
 function RepeatMT:read_to_end(): Async.TaskFuture<buffer>
-    error("Attempted to read_to_end on an infinite IO.Repeat source")
+    return Async.rejected({ kind = "InfiniteSource", message = "Attempted to read_to_end on an infinite IO.Repeat source" })
 end
 
 --[[
     Always errors, as Repeat is an infinite source.
 ]]
 function RepeatMT:read_to_string(): Async.TaskFuture<string>
-    error("Attempted to read_to_string on an infinite IO.Repeat source")
+    return Async.rejected({ kind = "InfiniteSource", message = "Attempted to read_to_string on an infinite IO.Repeat source" })
 end
 
 --[[
