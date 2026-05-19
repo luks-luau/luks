@@ -1,6 +1,6 @@
 use luks_module_sys::*;
-use std::ffi::{CStr, CString};
-use std::ptr;
+use std::ffi::CString;
+use std::os::raw::c_char;
 
 /// Parse headers from a Lua table at given index
 unsafe fn parse_headers(l: *mut lua_State, idx: i32) -> Vec<(String, String)> {
@@ -14,12 +14,16 @@ unsafe fn parse_headers(l: *mut lua_State, idx: i32) -> Vec<(String, String)> {
     unsafe {
         lua_pushnil(l);
         while lua_next(l, idx) != 0 {
-            let key = lua_tolstring(l, -2, ptr::null_mut());
-            let value = lua_tolstring(l, -1, ptr::null_mut());
+            let mut key_len: usize = 0;
+            let mut val_len: usize = 0;
+            let key = lua_tolstring(l, -2, &mut key_len);
+            let value = lua_tolstring(l, -1, &mut val_len);
 
             if !key.is_null() && !value.is_null() {
-                let key_str = CStr::from_ptr(key).to_string_lossy().into_owned();
-                let value_str = CStr::from_ptr(value).to_string_lossy().into_owned();
+                let key_bytes = std::slice::from_raw_parts(key as *const u8, key_len);
+                let val_bytes = std::slice::from_raw_parts(value as *const u8, val_len);
+                let key_str = String::from_utf8_lossy(key_bytes).into_owned();
+                let value_str = String::from_utf8_lossy(val_bytes).into_owned();
                 headers.push((key_str, value_str));
             }
 
@@ -51,15 +55,13 @@ unsafe fn push_response(
         lua_createtable(l, 0, headers.len() as i32);
         for (key, value) in headers {
             let key_cstr = CString::new(key.as_str()).unwrap();
-            let value_cstr = CString::new(value.as_str()).unwrap();
-            lua_pushstring(l, value_cstr.as_ptr());
+            lua_pushlstring(l, value.as_ptr() as *const c_char, value.len());
             lua_setfield(l, -2, key_cstr.as_ptr());
         }
         lua_setfield(l, -2, c"headers".as_ptr());
 
         if let Some(b) = body {
-            let body_cstr = CString::new(b).unwrap();
-            lua_pushstring(l, body_cstr.as_ptr());
+            lua_pushlstring(l, b.as_ptr() as *const c_char, b.len());
         } else {
             lua_pushnil(l);
         }
@@ -139,14 +141,16 @@ unsafe fn handle_request(l: *mut lua_State, method: &str) -> i32 {
             }
             return 1;
         }
-        let m = unsafe { lua_tolstring(l, 1, ptr::null_mut()) };
+        let mut m_len: usize = 0;
+        let m = unsafe { lua_tolstring(l, 1, &mut m_len) };
         if m.is_null() {
             unsafe {
                 push_error(l, "Invalid method argument", 0);
             }
             return 1;
         }
-        method_str = unsafe { CStr::from_ptr(m) }.to_string_lossy().into_owned();
+        let m_bytes = unsafe { std::slice::from_raw_parts(m as *const u8, m_len) };
+        method_str = String::from_utf8_lossy(m_bytes).into_owned();
         url_idx = 2;
         options_idx = 3;
     } else {
@@ -156,16 +160,16 @@ unsafe fn handle_request(l: *mut lua_State, method: &str) -> i32 {
     }
 
     // Get URL
-    let url = unsafe { lua_tolstring(l, url_idx, ptr::null_mut()) };
+    let mut url_len: usize = 0;
+    let url = unsafe { lua_tolstring(l, url_idx, &mut url_len) };
     if url.is_null() {
         unsafe {
             push_error(l, "Invalid or missing URL", 0);
         }
         return 1;
     }
-    let url = unsafe { CStr::from_ptr(url) }
-        .to_string_lossy()
-        .into_owned();
+    let url_bytes = unsafe { std::slice::from_raw_parts(url as *const u8, url_len) };
+    let url = String::from_utf8_lossy(url_bytes).into_owned();
 
     // Parse options table
     let mut headers = Vec::new();
@@ -190,9 +194,11 @@ unsafe fn handle_request(l: *mut lua_State, method: &str) -> i32 {
                 lua_pushstring(l, c"body".as_ptr());
                 lua_gettable(l, options_idx);
                 if lua_isstring(l, -1) != 0 {
-                    let body_str = lua_tolstring(l, -1, ptr::null_mut());
+                    let mut body_len: usize = 0;
+                    let body_str = lua_tolstring(l, -1, &mut body_len);
                     if !body_str.is_null() {
-                        body = Some(CStr::from_ptr(body_str).to_string_lossy().into_owned());
+                        let bytes = std::slice::from_raw_parts(body_str as *const u8, body_len);
+                        body = Some(String::from_utf8_lossy(bytes).into_owned());
                     }
                 }
                 lua_pop(l, 1);
