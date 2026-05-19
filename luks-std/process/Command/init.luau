@@ -94,8 +94,8 @@ function CommandMT:stderr(cfg: types.StdioConfig) self._opts.stderr = cfg; retur
 function CommandMT:spawn(): Async.TaskFuture<types.Child>
     local future, resolve, reject = Async.new_future()
     task.defer(function()
-        local handle, err = native.spawn(self._program, self._args, self._opts)
-        if handle then resolve(Child.new(handle)) else reject({ kind = "IoError", message = err or "spawn failed" }) end
+        local ok, handle = pcall(native.spawn, self._program, self._args, self._opts)
+        if ok then resolve(Child.new(handle)) else reject({ kind = "IoError", message = tostring(handle) }) end
     end)
     return future
 end

@@ -46,10 +46,4 @@ function Process.exit(code: number): () native.exit(code) end
 ]]
 function Process.abort(): () native.abort() end
 
---[[
-    Returns the process ID of the parent process.
-    @return The numeric parent PID
-]]
-function Process.ppid(): number return native.ppid() end
-
 return Process
