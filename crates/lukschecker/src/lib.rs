@@ -83,8 +83,7 @@ fn resolve_local_cache_path(target_path: &Path) -> PathBuf {
 }
 
 fn global_cache_dir() -> PathBuf {
-    let base = dirs::cache_dir()
-        .unwrap_or_else(|| PathBuf::from(".luks"));
+    let base = dirs::cache_dir().unwrap_or_else(|| PathBuf::from(".luks"));
     let dir = base.join("luks").join("checker");
     std::fs::create_dir_all(&dir).ok();
     dir
@@ -110,7 +109,12 @@ fn load_from_global_cache(hash: &str) -> Option<Vec<luau_analyzer_sys::Diagnosti
     let path = global_cache_path(hash);
     let data = std::fs::read(&path).ok()?;
     let cached: Vec<CachedDiagnostic> = bincode::deserialize(&data).ok()?;
-    Some(cached.iter().map(luau_analyzer_sys::Diagnostic::from).collect())
+    Some(
+        cached
+            .iter()
+            .map(luau_analyzer_sys::Diagnostic::from)
+            .collect(),
+    )
 }
 
 fn print_diagnostics(
@@ -202,9 +206,7 @@ fn print_diagnostics(
 /// - `path_ptr` must be null or a valid pointer to a null-terminated UTF-8 string.
 #[no_mangle]
 pub unsafe extern "C-unwind" fn luks_checker_check_path(path_ptr: *const c_char) -> i32 {
-    let result = std::panic::catch_unwind(|| {
-        unsafe { luks_checker_check_path_inner(path_ptr) }
-    });
+    let result = std::panic::catch_unwind(|| unsafe { luks_checker_check_path_inner(path_ptr) });
     match result {
         Ok(code) => code,
         Err(e) => {
@@ -275,12 +277,16 @@ unsafe fn luks_checker_check_path_inner(path_ptr: *const c_char) -> i32 {
         // Try cache hit
         if let Some(entry) = local_cache.files.get(&key) {
             if let Some(meta) = get_file_metadata(&canon) {
-                if entry.mtime_secs == meta.0
-                    && entry.mtime_nanos == meta.1
-                    && entry.size == meta.2
+                if entry.mtime_secs == meta.0 && entry.mtime_nanos == meta.1 && entry.size == meta.2
                 {
                     if let Some(cached_diags) = load_from_global_cache(&entry.content_hash) {
-                        print_diagnostics(file, &cached_diags, &mut total_errors, &mut total_warnings, true);
+                        print_diagnostics(
+                            file,
+                            &cached_diags,
+                            &mut total_errors,
+                            &mut total_warnings,
+                            true,
+                        );
                         continue;
                     }
                 }
@@ -298,14 +304,23 @@ unsafe fn luks_checker_check_path_inner(path_ptr: *const c_char) -> i32 {
 
         // Check global cache by content hash (shared across projects)
         if let Some(cached_diags) = load_from_global_cache(&current_hash) {
-            local_cache.files.insert(key, FileEntry {
-                content_hash: current_hash,
-                mtime_secs: current_meta.0,
-                mtime_nanos: current_meta.1,
-                size: current_meta.2,
-            });
+            local_cache.files.insert(
+                key,
+                FileEntry {
+                    content_hash: current_hash,
+                    mtime_secs: current_meta.0,
+                    mtime_nanos: current_meta.1,
+                    size: current_meta.2,
+                },
+            );
             local_changed = true;
-            print_diagnostics(file, &cached_diags, &mut total_errors, &mut total_warnings, true);
+            print_diagnostics(
+                file,
+                &cached_diags,
+                &mut total_errors,
+                &mut total_warnings,
+                true,
+            );
             continue;
         }
 
@@ -382,12 +397,15 @@ declare table: {
         save_to_global_cache(&current_hash, &diags);
 
         // Update local cache
-        local_cache.files.insert(key, FileEntry {
-            content_hash: current_hash,
-            mtime_secs: current_meta.0,
-            mtime_nanos: current_meta.1,
-            size: current_meta.2,
-        });
+        local_cache.files.insert(
+            key,
+            FileEntry {
+                content_hash: current_hash,
+                mtime_secs: current_meta.0,
+                mtime_nanos: current_meta.1,
+                size: current_meta.2,
+            },
+        );
         local_changed = true;
 
         print_diagnostics(file, &diags, &mut total_errors, &mut total_warnings, false);
@@ -415,7 +433,11 @@ declare table: {
     };
 
     let err_word = if total_errors == 1 { "error" } else { "errors" };
-    let warn_word = if total_warnings == 1 { "warning" } else { "warnings" };
+    let warn_word = if total_warnings == 1 {
+        "warning"
+    } else {
+        "warnings"
+    };
 
     if total_errors > 0 {
         if total_warnings > 0 {
