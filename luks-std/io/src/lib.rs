@@ -1,7 +1,26 @@
 #![allow(unsafe_op_in_unsafe_fn)]
 
 use luks_module_sys::*;
+use std::ffi::CString;
 use std::io::{Read, Write};
+
+/// Convert a Rust string to CString, replacing null bytes with U+FFFD
+fn str_to_cstring(s: &str) -> CString {
+    let sanitized = s.replace('\0', "\u{FFFD}");
+    CString::new(sanitized).expect("Failed to create CString after sanitization")
+}
+
+/// Raise a Lua error with the given message. This function does not return.
+///
+/// # Safety
+/// Assumes `l` is a valid `lua_State` pointer.
+unsafe fn lua_error_msg(l: *mut lua_State, msg: &str) -> ! {
+    unsafe {
+        let cstr = str_to_cstring(msg);
+        lua_pushstring(l, cstr.as_ptr());
+        lua_error(l);
+    }
+}
 
 /// Helper to get a buffer from a Lua pointer/index
 unsafe fn get_buffer(l: *mut lua_State, idx: i32) -> Option<&'static mut [u8]> {
@@ -19,32 +38,31 @@ unsafe fn get_buffer(l: *mut lua_State, idx: i32) -> Option<&'static mut [u8]> {
 // ---------------------------------------------------------------------------
 
 /// Reads bytes from stdin into a Luau buffer.
-/// Lua: stdin_read(buf: buffer, offset: number, len: number) -> (bytes_read: number, error: string?)
+/// Lua: stdin_read(buf: buffer, offset: number, len: number) -> bytes_read: number
+///      On error, raises a Lua error (caught by pcall).
 unsafe extern "C-unwind" fn lua_stdin_read(l: *mut lua_State) -> i32 {
     let buf_idx = 1;
     let offset = lua_tointeger(l, 2) as usize;
     let len = lua_tointeger(l, 3) as usize;
 
-    if let Some(buf) = get_buffer(l, buf_idx) {
-        let max_len = buf.len().saturating_sub(offset);
-        let read_len = if len == 0 { max_len } else { len.min(max_len) };
+    let Some(buf) = get_buffer(l, buf_idx) else {
+        lua_pushinteger(l, 0);
+        return 1;
+    };
 
-        let mut stdin = std::io::stdin().lock();
-        match stdin.read(&mut buf[offset..offset + read_len]) {
-            Ok(n) => {
-                lua_pushinteger(l, n as i64);
-                return 1;
-            }
-            Err(e) => {
-                lua_pushnil(l);
-                let err_msg = std::ffi::CString::new(e.to_string()).unwrap_or_default();
-                lua_pushstring(l, err_msg.as_ptr());
-                return 2;
-            }
+    let max_len = buf.len().saturating_sub(offset);
+    let read_len = if len == 0 { max_len } else { len.min(max_len) };
+
+    let mut stdin = std::io::stdin().lock();
+    match stdin.read(&mut buf[offset..offset + read_len]) {
+        Ok(n) => {
+            lua_pushinteger(l, n as i64);
+            1
+        }
+        Err(e) => {
+            lua_error_msg(l, &format!("stdin read error: {}", e));
         }
     }
-    lua_pushinteger(l, 0);
-    1
 }
 
 // ---------------------------------------------------------------------------
@@ -52,7 +70,8 @@ unsafe extern "C-unwind" fn lua_stdin_read(l: *mut lua_State) -> i32 {
 // ---------------------------------------------------------------------------
 
 /// Writes bytes to stdout from a Luau buffer or string.
-/// Lua: stdout_write(buf: buffer | string, offset: number, len: number) -> (bytes_written: number, error: string?)
+/// Lua: stdout_write(buf: buffer | string, offset: number, len: number) -> bytes_written: number
+///      On error, raises a Lua error (caught by pcall).
 unsafe extern "C-unwind" fn lua_stdout_write(l: *mut lua_State) -> i32 {
     let buf_idx = 1;
     let offset = lua_tointeger(l, 2) as usize;
@@ -79,18 +98,22 @@ unsafe extern "C-unwind" fn lua_stdout_write(l: *mut lua_State) -> i32 {
             1
         }
         Err(e) => {
-            lua_pushnil(l);
-            let err_msg = std::ffi::CString::new(e.to_string()).unwrap_or_default();
-            lua_pushstring(l, err_msg.as_ptr());
-            2
+            lua_error_msg(l, &format!("stdout write error: {}", e));
         }
     }
 }
 
-unsafe extern "C-unwind" fn lua_stdout_flush(_l: *mut lua_State) -> i32 {
+unsafe extern "C-unwind" fn lua_stdout_flush(l: *mut lua_State) -> i32 {
     let mut stdout = std::io::stdout().lock();
-    let _ = stdout.flush();
-    0
+    match stdout.flush() {
+        Ok(()) => {
+            lua_pushboolean(l, 1);
+            1
+        }
+        Err(e) => {
+            lua_error_msg(l, &format!("stdout flush error: {}", e));
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -123,18 +146,22 @@ unsafe extern "C-unwind" fn lua_stderr_write(l: *mut lua_State) -> i32 {
             1
         }
         Err(e) => {
-            lua_pushnil(l);
-            let err_msg = std::ffi::CString::new(e.to_string()).unwrap_or_default();
-            lua_pushstring(l, err_msg.as_ptr());
-            2
+            lua_error_msg(l, &format!("stderr write error: {}", e));
         }
     }
 }
 
-unsafe extern "C-unwind" fn lua_stderr_flush(_l: *mut lua_State) -> i32 {
+unsafe extern "C-unwind" fn lua_stderr_flush(l: *mut lua_State) -> i32 {
     let mut stderr = std::io::stderr().lock();
-    let _ = stderr.flush();
-    0
+    match stderr.flush() {
+        Ok(()) => {
+            lua_pushboolean(l, 1);
+            1
+        }
+        Err(e) => {
+            lua_error_msg(l, &format!("stderr flush error: {}", e));
+        }
+    }
 }
 
 /// # Safety
