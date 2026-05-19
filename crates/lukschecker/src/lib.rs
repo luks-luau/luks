@@ -118,8 +118,27 @@ fn print_diagnostics(
     diags: &[luau_analyzer_sys::Diagnostic],
     total_errors: &mut i32,
     total_warnings: &mut i32,
-    _cached: bool,
+    cached: bool,
 ) {
+    if !cached {
+        let filename = file.file_name().and_then(|s| s.to_str()).unwrap_or("");
+        let module_name = if filename == "init.luau" || filename == "init.lua" {
+            file.parent()
+                .and_then(|p| p.file_name())
+                .and_then(|s| s.to_str())
+                .unwrap_or("workspace")
+        } else {
+            file.file_stem()
+                .and_then(|s| s.to_str())
+                .unwrap_or(filename)
+        };
+        println!(
+            "    \x1b[1;92mChecking\x1b[0m {} ({})",
+            module_name,
+            file.display(),
+        );
+    }
+
     if diags.is_empty() {
         return;
     }
