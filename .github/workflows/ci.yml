@@ -76,10 +76,10 @@ jobs:
       run: |
         Get-ChildItem -Path .\target\release -Filter "luks*" | Format-Table -AutoSize
         Get-ChildItem -Path .\target\release -Filter "testmodule*" | Format-Table -AutoSize
-        .\target\release\lukscli.exe ExecuteTests.luau
+        .\target\release\lukscli.exe tests/main.luau
 
     - name: Run Luau test suite (Unix)
       if: runner.os != 'Windows'
       shell: bash
       run: |
-        ./target/release/lukscli ExecuteTests.luau
+        ./target/release/lukscli tests/main.luau
