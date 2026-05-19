@@ -1,0 +1,145 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+env:
+  CARGO_TERM_COLOR: always
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: ${{ matrix.platform }}
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            platform: linux
+            cli_ext: ''
+            lib_prefix: 'lib'
+            lib_ext: '.so'
+          - os: windows-latest
+            platform: windows
+            cli_ext: '.exe'
+            lib_prefix: ''
+            lib_ext: '.dll'
+          - os: macos-latest
+            platform: macos
+            cli_ext: ''
+            lib_prefix: 'lib'
+            lib_ext: '.dylib'
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/registry
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('Cargo.toml') }}
+
+      - name: Cache cargo index
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/git
+          key: ${{ runner.os }}-cargo-index-${{ hashFiles('Cargo.toml') }}
+
+      - name: Cache cargo build
+        uses: actions/cache@v4
+        with:
+          path: target
+          key: ${{ runner.os }}-cargo-build-target-${{ hashFiles('Cargo.toml') }}
+
+      - name: Build release
+        run: cargo build --release --verbose
+
+      - name: Prepare core archive
+        shell: bash
+        run: |
+          mkdir -p dist/core
+          cp target/release/lukscli${{ matrix.cli_ext }} dist/core/luks${{ matrix.cli_ext }}
+          cp "target/release/${{ matrix.lib_prefix }}luksruntime${{ matrix.lib_ext }}" dist/core/
+          cp "target/release/${{ matrix.lib_prefix }}lukschecker${{ matrix.lib_ext }}" dist/core/
+
+      - name: Prepare std archive
+        shell: bash
+        env:
+          LIB_PREFIX: ${{ matrix.lib_prefix }}
+          LIB_EXT: ${{ matrix.lib_ext }}
+        run: |
+          mkdir -p dist/std/std
+          cp -r luks-std/* dist/std/std/
+
+          # Strip Rust build artifacts
+          find dist/std/std -type d -name src -exec rm -rf {} + 2>/dev/null || true
+          find dist/std/std -name Cargo.toml -delete
+          find dist/std/std -name .luks -type d -exec rm -rf {} + 2>/dev/null || true
+
+          # Copy compiled native libs into each module's lib/
+          NATIVE_DIRS=(fs io net env process Json Http WebSocket ZLib Crypto luauautogui std-template)
+          NATIVE_PKGS=(luks_fs io luks_net env luks_process json http websocket zlib crypto luauautogui native)
+
+          for i in "${!NATIVE_DIRS[@]}"; do
+            dir="${NATIVE_DIRS[$i]}"
+            pkg="${NATIVE_PKGS[$i]}"
+            mkdir -p "dist/std/std/$dir/lib"
+            cp "target/release/${LIB_PREFIX}${pkg}${LIB_EXT}" "dist/std/std/$dir/lib/"
+          done
+
+      - name: Create archives (Unix)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          cd dist/core && zip -r ../../luks-${{ matrix.platform }}.zip . && cd ../..
+          cd dist/std && zip -r ../../luks-std-${{ matrix.platform }}.zip . && cd ../..
+
+      - name: Create archives (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          7z a -tzip luks-${{ matrix.platform }}.zip ./dist/core/*
+          7z a -tzip luks-std-${{ matrix.platform }}.zip ./dist/std/*
+
+      - name: Upload core archive
+        uses: actions/upload-artifact@v4
+        with:
+          name: luks-${{ matrix.platform }}
+          path: luks-${{ matrix.platform }}.zip
+
+      - name: Upload std archive
+        uses: actions/upload-artifact@v4
+        with:
+          name: luks-std-${{ matrix.platform }}
+          path: luks-std-${{ matrix.platform }}.zip
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/download-artifact@v4
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          generate_release_notes: true
+          make_latest: true
+          files: |
+            luks-*/luks-*.zip
+            luks-std-*/luks-std-*.zip
