@@ -332,6 +332,10 @@ function FileMT:chain(other: IO.Reader) return IO.Chain.new(self, other) end
     @param self The file instance
 ]]
 function FileMT:close()
+    local handle = (self :: any)._handle
+    if handle then
+        pcall(native.close, handle)
+    end
     (self :: any)._handle = nil
 end
 

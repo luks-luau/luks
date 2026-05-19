@@ -172,11 +172,20 @@ unsafe extern "C-unwind" fn fs_open(l: *mut lua_State) -> i32 {
 }
 
 unsafe extern "C-unwind" fn fs_file_gc(l: *mut lua_State) -> i32 {
+    fs_close_file(l);
+    0
+}
+
+unsafe fn fs_close_file(l: *mut lua_State) {
     let ud_ptr = lua_touserdata(l, 1) as *mut *mut LuauFile;
     if !ud_ptr.is_null() && !(*ud_ptr).is_null() {
         let _ = Box::from_raw(*ud_ptr);
         *ud_ptr = std::ptr::null_mut();
     }
+}
+
+unsafe extern "C-unwind" fn fs_close(l: *mut lua_State) -> i32 {
+    fs_close_file(l);
     0
 }
 
@@ -522,6 +531,8 @@ pub unsafe extern "C-unwind" fn luau_export(l: *mut lua_State, api: *const LuauA
         lua_setfield(l, -2, c"sync".as_ptr());
         lua_pushcfunction(l, fs_set_len);
         lua_setfield(l, -2, c"set_len".as_ptr());
+        lua_pushcfunction(l, fs_close);
+        lua_setfield(l, -2, c"close".as_ptr());
 
         lua_pushcfunction(l, fs_remove_file);
         lua_setfield(l, -2, c"remove_file".as_ptr());

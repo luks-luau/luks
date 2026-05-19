@@ -87,7 +87,9 @@ end
 ]]
 function FS.write(path: string, contents: string | buffer): Async.TaskFuture<any>
     return FS.File.create(path):and_then(function(file)
-        return file:write_all(contents)
+        return file:write_all(contents):inspect(function()
+            file:close()
+        end)
     end)
 end
 
