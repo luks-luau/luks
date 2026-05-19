@@ -194,7 +194,7 @@ unsafe extern "C-unwind" fn process_child_try_wait(l: *mut lua_State) -> i32 {
     let child = &*get_child(l, 1);
     match child.inner.lock().unwrap().try_wait() {
         Ok(Some(status)) => {
-            lua_pushinteger(l, status.code().unwrap_or(0) as i64);
+            lua_pushinteger(l, status.code().unwrap_or(1) as i64);
             1
         }
         Ok(None) => {
