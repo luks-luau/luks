@@ -100,179 +100,116 @@ end
 function FS.copy(from: string, to: string): Async.TaskFuture<number>
     local future, resolve, reject = Async.new_future()
     task.defer(function()
-        local n, err = native.copy(from, to)
-        if n then resolve(n) else reject({ kind = "IoError", message = err or "copy failed" } :: FsError) end
+        local ok, result = pcall(native.copy, from, to)
+        if ok then resolve(result) else reject({ kind = "IoError", message = tostring(result) } :: FsError) end
     end)
     return future
 end
 
---[[
-    Renames a file or directory.
-    @param from The current path
-    @param to The new path
-    @return A future resolving when the rename is complete
-]]
 function FS.rename(from: string, to: string): Async.TaskFuture<any>
     local future, resolve, reject = Async.new_future()
     task.defer(function()
-        local ok, err = native.rename(from, to)
-        if ok then resolve(nil) else reject({ kind = "IoError", message = err or "rename failed" } :: FsError) end
+        local ok, result = pcall(native.rename, from, to)
+        if ok then resolve(nil) else reject({ kind = "IoError", message = tostring(result) } :: FsError) end
     end)
     return future
 end
 
---[[
-    Removes a file from the filesystem.
-    @param path The path to the file to remove
-    @return A future resolving when the removal is complete
-]]
 function FS.remove_file(path: string): Async.TaskFuture<any>
     local future, resolve, reject = Async.new_future()
     task.defer(function()
-        local ok, err = native.remove_file(path)
-        if ok then resolve(nil) else reject({ kind = "IoError", message = err or "remove_file failed" } :: FsError) end
+        local ok, result = pcall(native.remove_file, path)
+        if ok then resolve(nil) else reject({ kind = "IoError", message = tostring(result) } :: FsError) end
     end)
     return future
 end
 
---[[
-    Queries metadata about a file or directory.
-    Follows symbolic links.
-    @param path The path to query
-    @return A future resolving to the metadata
-]]
 function FS.metadata(path: string): Async.TaskFuture<Metadata>
     local future, resolve, reject = Async.new_future()
     task.defer(function()
-        local meta, err = native.metadata(path, true)
-        if meta then resolve(Metadata.new(meta)) else reject({ kind = "IoError", message = err or "metadata failed" } :: FsError) end
+        local ok, result = pcall(native.metadata, path, true)
+        if ok then resolve(Metadata.new(result)) else reject({ kind = "IoError", message = tostring(result) } :: FsError) end
     end)
     return future
 end
 
---[[
-    Queries metadata about a file or directory without following symbolic links.
-    @param path The path to query
-    @return A future resolving to the metadata
-]]
 function FS.symlink_metadata(path: string): Async.TaskFuture<Metadata>
     local future, resolve, reject = Async.new_future()
     task.defer(function()
-        local meta, err = native.metadata(path, false)
-        if meta then resolve(Metadata.new(meta)) else reject({ kind = "IoError", message = err or "metadata failed" } :: FsError) end
+        local ok, result = pcall(native.metadata, path, false)
+        if ok then resolve(Metadata.new(result)) else reject({ kind = "IoError", message = tostring(result) } :: FsError) end
     end)
     return future
 end
 
---[[
-    Returns the canonical, absolute form of a path.
-    @param path The path to canonicalize
-    @return A future resolving to the canonical path string
-]]
 function FS.canonicalize(path: string): Async.TaskFuture<string>
     local future, resolve, reject = Async.new_future()
     task.defer(function()
-        local p, err = native.canonicalize(path)
-        if p then resolve(p) else reject({ kind = "IoError", message = err or "canonicalize failed" } :: FsError) end
+        local ok, result = pcall(native.canonicalize, path)
+        if ok then resolve(result) else reject({ kind = "IoError", message = tostring(result) } :: FsError) end
     end)
     return future
 end
 
---[[
-    Returns an iterator over the entries in a directory.
-    @param path The path to the directory
-    @return A future resolving to a ReadDir iterator
-]]
 function FS.read_dir(path: string): Async.TaskFuture<ReadDir>
     local future, resolve, reject = Async.new_future()
     task.defer(function()
-        local handle, err = native.read_dir(path)
-        if handle then resolve(ReadDir.new(handle)) else reject({ kind = "IoError", message = err or "read_dir failed" } :: FsError) end
+        local ok, result = pcall(native.read_dir, path)
+        if ok then resolve(ReadDir.new(result)) else reject({ kind = "IoError", message = tostring(result) } :: FsError) end
     end)
     return future
 end
 
---[[
-    Creates a new directory.
-    @param path The path to create
-    @return A future resolving when the directory is created
-]]
 function FS.create_dir(path: string): Async.TaskFuture<any>
     local future, resolve, reject = Async.new_future()
     task.defer(function()
-        local ok, err = native.create_dir(path, false)
-        if ok then resolve(nil) else reject({ kind = "IoError", message = err or "create_dir failed" } :: FsError) end
+        local ok, result = pcall(native.create_dir, path, false)
+        if ok then resolve(nil) else reject({ kind = "IoError", message = tostring(result) } :: FsError) end
     end)
     return future
 end
 
---[[
-    Recursively creates a directory and all of its parent components if they are missing.
-    @param path The path to create
-    @return A future resolving when the directories are created
-]]
 function FS.create_dir_all(path: string): Async.TaskFuture<any>
     local future, resolve, reject = Async.new_future()
     task.defer(function()
-        local ok, err = native.create_dir(path, true)
-        if ok then resolve(nil) else reject({ kind = "IoError", message = err or "create_dir_all failed" } :: FsError) end
+        local ok, result = pcall(native.create_dir, path, true)
+        if ok then resolve(nil) else reject({ kind = "IoError", message = tostring(result) } :: FsError) end
     end)
     return future
 end
 
---[[
-    Removes an empty directory.
-    @param path The path to the directory to remove
-    @return A future resolving when the removal is complete
-]]
 function FS.remove_dir(path: string): Async.TaskFuture<any>
     local future, resolve, reject = Async.new_future()
     task.defer(function()
-        local ok, err = native.remove_dir(path, false)
-        if ok then resolve(nil) else reject({ kind = "IoError", message = err or "remove_dir failed" } :: FsError) end
+        local ok, result = pcall(native.remove_dir, path, false)
+        if ok then resolve(nil) else reject({ kind = "IoError", message = tostring(result) } :: FsError) end
     end)
     return future
 end
 
---[[
-    Removes a directory and all of its contents.
-    @param path The path to the directory to remove
-    @return A future resolving when the removal is complete
-]]
 function FS.remove_dir_all(path: string): Async.TaskFuture<any>
     local future, resolve, reject = Async.new_future()
     task.defer(function()
-        local ok, err = native.remove_dir(path, true)
-        if ok then resolve(nil) else reject({ kind = "IoError", message = err or "remove_dir_all failed" } :: FsError) end
+        local ok, result = pcall(native.remove_dir, path, true)
+        if ok then resolve(nil) else reject({ kind = "IoError", message = tostring(result) } :: FsError) end
     end)
     return future
 end
 
---[[
-    Creates a hard link from one path to another.
-    @param src The source path
-    @param dst The destination path
-    @return A future resolving when the link is created
-]]
 function FS.hard_link(src: string, dst: string): Async.TaskFuture<any>
     local future, resolve, reject = Async.new_future()
     task.defer(function()
-        local ok, err = native.hard_link(src, dst)
-        if ok then resolve(nil) else reject({ kind = "IoError", message = err or "hard_link failed" } :: FsError) end
+        local ok, result = pcall(native.hard_link, src, dst)
+        if ok then resolve(nil) else reject({ kind = "IoError", message = tostring(result) } :: FsError) end
     end)
     return future
 end
 
---[[
-    Reads a symbolic link and returns the path it points to.
-    @param path The path to the symbolic link
-    @return A future resolving to the target path string
-]]
 function FS.read_link(path: string): Async.TaskFuture<string>
     local future, resolve, reject = Async.new_future()
     task.defer(function()
-        local p, err = native.read_link(path)
-        if p then resolve(p) else reject({ kind = "IoError", message = err or "read_link failed" } :: FsError) end
+        local ok, result = pcall(native.read_link, path)
+        if ok then resolve(result) else reject({ kind = "IoError", message = tostring(result) } :: FsError) end
     end)
     return future
 end

@@ -34,12 +34,12 @@ end)()
 function FileObj.open_with_options(path: string, options: any): Async.TaskFuture<File>
     local future, resolve, reject = Async.new_future()
     task.defer(function()
-        local handle, err = native.open(path, options)
-        if handle then
+        local ok, handle = pcall(native.open, path, options)
+        if ok then
             local self: Self = { _handle = handle }
             resolve(setmetatable(self, FileMT) :: any)
         else
-            reject({ kind = "IoError", message = err or "failed to open file" } :: IoError)
+            reject({ kind = "IoError", message = tostring(handle) } :: IoError)
         end
     end)
     return future
@@ -82,8 +82,8 @@ function FileMT:read(buf: buffer, offset: number?, len: number?): Async.TaskFutu
             reject({ kind = "IoError", message = "file handle is closed" } :: IoError)
             return
         end
-        local n, err = native.read(this._handle, buf, offset or 0, len or buffer.len(buf))
-        if n then resolve(n) else reject({ kind = "IoError", message = err or "read failed" } :: IoError) end
+        local ok, n = pcall(native.read, this._handle, buf, offset or 0, len or buffer.len(buf))
+        if ok then resolve(n) else reject({ kind = "IoError", message = tostring(n) } :: IoError) end
     end)
     return future
 end
@@ -96,19 +96,23 @@ end
 function FileMT:read_to_end(): Async.TaskFuture<buffer>
     local future, resolve, reject = Async.new_future()
     task.spawn(function()
-        local res = buffer.create(0)
-        local tmp = buffer.create(8192)
-        while true do
-            local n, ok = (self :: IO.Reader):read(tmp):Wait()
-            if not ok then reject(n :: any); return end
-            if n == 0 then break end
-            local num: number = n :: number
-            local new_res = buffer.create(buffer.len(res) + num)
-            buffer.copy(new_res, 0, res)
-            buffer.copy(new_res, buffer.len(res), tmp, 0, num)
-            res = new_res
-        end
-        resolve(res)
+        local ok, err = pcall(function()
+            local res = buffer.create(0)
+            local tmp = buffer.create(8192)
+            while true do
+                local n, ok_ = (self :: IO.Reader):read(tmp):Wait()
+                if not ok_ then reject(n :: any); return nil end
+                if n == 0 then break end
+                local num: number = n :: number
+                local new_res = buffer.create(buffer.len(res) + num)
+                buffer.copy(new_res, 0, res)
+                buffer.copy(new_res, buffer.len(res), tmp, 0, num)
+                res = new_res
+            end
+            resolve(res)
+            return nil
+        end)
+        if not ok then reject({ kind = "InternalError", message = tostring(err) } :: IoError) end
     end)
     return future
 end
@@ -132,17 +136,21 @@ end
 function FileMT:read_exact(buf: buffer, len: number): Async.TaskFuture<any>
     local future, resolve, reject = Async.new_future()
     task.spawn(function()
-        local total = 0
-        while total < len do
-            local n, ok = (self :: IO.Reader):read(buf, total, len - total):Wait()
-            if not ok then reject(n :: any); return end
-            if n == 0 then
-                reject({ kind = "UnexpectedEof", message = "failed to fill whole buffer" } :: IoError)
-                return
+        local ok, err = pcall(function()
+            local total = 0
+            while total < len do
+                local n, ok_ = (self :: IO.Reader):read(buf, total, len - total):Wait()
+                if not ok_ then reject(n :: any); return nil end
+                if n == 0 then
+                    reject({ kind = "UnexpectedEof", message = "failed to fill whole buffer" } :: IoError)
+                    return nil
+                end
+                total += n :: number
             end
-            total += n :: number
-        end
-        resolve(nil)
+            resolve(nil)
+            return nil
+        end)
+        if not ok then reject({ kind = "InternalError", message = tostring(err) } :: IoError) end
     end)
     return future
 end
@@ -163,8 +171,8 @@ function FileMT:write(buf: buffer | string, offset: number?, len: number?): Asyn
             reject({ kind = "IoError", message = "file handle is closed" } :: IoError)
             return
         end
-        local n, err = native.write(this._handle, buf, offset or 0, len or (if type(buf) == "string" then #buf else buffer.len(buf)))
-        if n then resolve(n) else reject({ kind = "IoError", message = err or "write failed" } :: IoError) end
+        local ok, n = pcall(native.write, this._handle, buf, offset or 0, len or (if type(buf) == "string" then #buf else buffer.len(buf)))
+        if ok then resolve(n) else reject({ kind = "IoError", message = tostring(n) } :: IoError) end
     end)
     return future
 end
@@ -178,18 +186,22 @@ end
 function FileMT:write_all(buf: buffer | string): Async.TaskFuture<any>
     local future, resolve, reject = Async.new_future()
     task.spawn(function()
-        local total = 0
-        local len = if type(buf) == "string" then #buf else buffer.len(buf)
-        while total < len do
-            local n, ok = (self :: IO.Writer):write(buf, total, len - total):Wait()
-            if not ok then reject(n :: any); return end
-            if n == 0 then
-                reject({ kind = "WriteZero", message = "failed to write whole buffer" } :: IoError)
-                return
+        local ok, err = pcall(function()
+            local total = 0
+            local len = if type(buf) == "string" then #buf else buffer.len(buf)
+            while total < len do
+                local n, ok_ = (self :: IO.Writer):write(buf, total, len - total):Wait()
+                if not ok_ then reject(n :: any); return nil end
+                if n == 0 then
+                    reject({ kind = "WriteZero", message = "failed to write whole buffer" } :: IoError)
+                    return nil
+                end
+                total += n :: number
             end
-            total += n :: number
-        end
-        resolve(nil)
+            resolve(nil)
+            return nil
+        end)
+        if not ok then reject({ kind = "InternalError", message = tostring(err) } :: IoError) end
     end)
     return future
 end
@@ -207,8 +219,8 @@ function FileMT:sync_all(): Async.TaskFuture<any>
             reject({ kind = "IoError", message = "file handle is closed" } :: IoError)
             return
         end
-        local ok, err = native.sync(this._handle, false)
-        if ok then resolve(nil) else reject({ kind = "IoError", message = err or "sync_all failed" } :: IoError) end
+        local ok, result = pcall(native.sync, this._handle, false)
+        if ok then resolve(nil) else reject({ kind = "IoError", message = tostring(result) } :: IoError) end
     end)
     return future
 end
@@ -226,18 +238,12 @@ function FileMT:sync_data(): Async.TaskFuture<any>
             reject({ kind = "IoError", message = "file handle is closed" } :: IoError)
             return
         end
-        local ok, err = native.sync(this._handle, true)
-        if ok then resolve(nil) else reject({ kind = "IoError", message = err or "sync_data failed" } :: IoError) end
+        local ok, result = pcall(native.sync, this._handle, true)
+        if ok then resolve(nil) else reject({ kind = "IoError", message = tostring(result) } :: IoError) end
     end)
     return future
 end
 
---[[
-    Truncates or extends the file to the specified size.
-    @param self The file instance
-    @param size The new size in bytes
-    @return A future resolving when the operation is complete
-]]
 function FileMT:set_len(size: number): Async.TaskFuture<any>
     local this: Self = self :: any
     local future, resolve, reject = Async.new_future()
@@ -246,8 +252,8 @@ function FileMT:set_len(size: number): Async.TaskFuture<any>
             reject({ kind = "IoError", message = "file handle is closed" } :: IoError)
             return
         end
-        local ok, err = native.set_len(this._handle, size)
-        if ok then resolve(nil) else reject({ kind = "IoError", message = err or "set_len failed" } :: IoError) end
+        local ok, result = pcall(native.set_len, this._handle, size)
+        if ok then resolve(nil) else reject({ kind = "IoError", message = tostring(result) } :: IoError) end
     end)
     return future
 end
@@ -290,8 +296,8 @@ function FileMT:seek(pos: IO.SeekFrom): Async.TaskFuture<number>
             reject({ kind = "IoError", message = "file handle is closed" } :: IoError)
             return
         end
-        local n, err = native.seek(this._handle, whence, p)
-        if n then resolve(n) else reject({ kind = "IoError", message = err or "seek failed" } :: IoError) end
+        local ok, result = pcall(native.seek, this._handle, whence, p)
+        if ok then resolve(result) else reject({ kind = "IoError", message = tostring(result) } :: IoError) end
     end)
     return future
 end
@@ -301,10 +307,8 @@ end
     @param self The file instance
     @return The current position in bytes from the start
 ]]
-function FileMT:position(): number
-    local res, ok = (self :: IO.Seeker):seek({ kind = "Current", pos = 0 }):Wait()
-    if not ok then error(tostring(res)) end
-    return res :: number
+function FileMT:position(): Async.TaskFuture<number>
+    return (self :: IO.Seeker):seek({ kind = "Current", pos = 0 })
 end
 
 --[[

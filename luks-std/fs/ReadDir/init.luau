@@ -36,11 +36,11 @@ function ReadDirMT:next(): Async.TaskFuture<types.DirEntry?>
             reject({ kind = "IoError", message = "readdir handle is closed" } :: types.FsError)
             return
         end
-        local entry, err = native.readdir_next(this._handle)
-        if entry then
-            resolve(setmetatable(entry, EntryMT) :: any)
-        elseif err then
-            reject({ kind = "IoError", message = err } :: types.FsError)
+        local ok, result = pcall(native.readdir_next, this._handle)
+        if not ok then
+            reject({ kind = "IoError", message = tostring(result) } :: types.FsError)
+        elseif result then
+            resolve(setmetatable(result, EntryMT) :: any)
         else
             resolve(nil)
         end
@@ -64,8 +64,8 @@ end
 function EntryMT:metadata(): Async.TaskFuture<types.Metadata>
     local future, resolve, reject = Async.new_future()
     task.defer(function()
-        local meta, err = native.metadata(self.path, true)
-        if meta then resolve(Metadata.new(meta)) else reject({ kind = "IoError", message = err or "metadata failed" } :: types.FsError) end
+        local ok, result = pcall(native.metadata, self.path, true)
+        if ok then resolve(Metadata.new(result)) else reject({ kind = "IoError", message = tostring(result) } :: types.FsError) end
     end)
     return future
 end
