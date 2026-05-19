@@ -161,11 +161,6 @@ end
 
 h.print_final_summary(total_stats.total, total_stats.passed, total_stats.failed)
 
-local Process = require("../luks-std/Process")
 if not all_passed then
-    Process.exit(1)
-else
-    Process.exit(0)
+    error("Some tests failed", 0)
 end
-
-return all_passed
