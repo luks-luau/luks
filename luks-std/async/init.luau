@@ -158,16 +158,17 @@ local Async = {}
 local TaskFutureMT = {}
 TaskFutureMT.__index = TaskFutureMT
 
---[[ Internal helper to connect to a future, handling immediate resolution. ]]
+--[[ Internal helper to connect to a future, handling immediate resolution.
+     Uses :Once since TaskFuture is one-shot; auto-disconnects on fire. ]]
 local function connect<T>(future: any, onData: (T) -> (), onError: (FsError) -> ())
     local f = future :: TaskFuture<T>
     if f._state == "Resolved" then
         task.spawn(onData, f._value :: T)
-    elseif f._state == "Rejected" then
-        task.spawn(onError, f._error :: FsError)
+    elseif f._state == "Rejected" or f._state == "Cancelled" then
+        task.spawn(onError, f._error or { kind = "Cancelled", message = "future was cancelled" })
     else
-        f.OnData:Connect(onData)
-        f.OnError:Connect(onError)
+        f.OnData:Once(onData)
+        f.OnError:Once(onError)
     end
 end
 
@@ -264,9 +265,11 @@ end
 ]]
 function TaskFutureMT:inspect<T>(callback: (T) -> ()): TaskFuture<T>
     local self_typed = (self :: any) :: TaskFuture<T>
-    connect(self_typed, function(data)
-        pcall(callback, data)
-    end, function() end)
+    if self_typed._state == "Resolved" then
+        pcall(callback, self_typed._value :: T)
+    elseif self_typed._state == "Pending" then
+        self_typed.OnData:Once(function(data) pcall(callback, data) end)
+    end
     return self_typed
 end
 
@@ -275,9 +278,13 @@ end
 ]]
 function TaskFutureMT:inspect_err<T>(callback: (FsError) -> ()): TaskFuture<T>
     local self_typed = (self :: any) :: TaskFuture<T>
-    connect(self_typed, function() end, function(err)
-        pcall(callback, err)
-    end)
+    if self_typed._state == "Rejected" then
+        pcall(callback, self_typed._error :: FsError)
+    elseif self_typed._state == "Cancelled" then
+        pcall(callback, ({ kind = "Cancelled", message = "future was cancelled" } :: FsError))
+    elseif self_typed._state == "Pending" then
+        self_typed.OnError:Once(function(err) pcall(callback, err) end)
+    end
     return self_typed
 end
 
@@ -443,7 +450,13 @@ function Async.join(futures: {TaskFuture<any>}): TaskFuture<{any}>
                 resolve(results)
             end
         end, function(err)
-            reject(err) -- Standard Join behavior: First error fails the entire set.
+            reject(err)
+            -- Cancel remaining futures to prevent orphaned callbacks
+            for j, other in futures do
+                if j ~= i then
+                    (other :: any):cancel()
+                end
+            end
         end)
     end
 
@@ -461,16 +474,28 @@ function Async.select(futures: {TaskFuture<any>}): TaskFuture<any>
     local select_future, resolve, reject = Async.new_future()
     local done = false
 
-    for _, fut in futures do
+    for i, fut in futures do
         connect(fut, function(data)
             if not done then
                 done = true
                 resolve(data)
+                -- Cancel remaining futures to prevent orphaned callbacks
+                for j, other in futures do
+                    if j ~= i then
+                        (other :: any):cancel()
+                    end
+                end
             end
         end, function(err)
             if not done then
                 done = true
                 reject(err)
+                -- Cancel remaining futures to prevent orphaned callbacks
+                for j, other in futures do
+                    if j ~= i then
+                        (other :: any):cancel()
+                    end
+                end
             end
         end)
     end
