@@ -60,6 +60,14 @@ fn str_to_cstring(s: &str) -> CString {
     CString::new(s).unwrap_or_else(|_| CString::new("").unwrap())
 }
 
+fn lua_error_msg(l: *mut lua_State, msg: &str) -> ! {
+    unsafe {
+        let cstr = str_to_cstring(msg);
+        lua_pushstring(l, cstr.as_ptr());
+        lua_error(l);
+    }
+}
+
 unsafe fn get_string_arg(l: *mut lua_State, idx: i32) -> String {
     let mut len = 0;
     let ptr = lua_tolstring(l, idx, &mut len);
@@ -158,10 +166,7 @@ unsafe extern "C-unwind" fn process_spawn(l: *mut lua_State) -> i32 {
             1
         }
         Err(e) => {
-            lua_pushnil(l);
-            let err = e.to_string();
-            lua_pushstring(l, str_to_cstring(&err).as_ptr());
-            2
+            lua_error_msg(l, &format!("spawn failed: {}", e));
         }
     }
 }
@@ -180,9 +185,7 @@ unsafe extern "C-unwind" fn process_child_kill(l: *mut lua_State) -> i32 {
             1
         }
         Err(e) => {
-            lua_pushnil(l);
-            lua_pushstring(l, str_to_cstring(&e.to_string()).as_ptr());
-            2
+            lua_error_msg(l, &format!("kill failed: {}", e));
         }
     }
 }
@@ -199,9 +202,7 @@ unsafe extern "C-unwind" fn process_child_try_wait(l: *mut lua_State) -> i32 {
             1
         }
         Err(e) => {
-            lua_pushnil(l);
-            lua_pushstring(l, str_to_cstring(&e.to_string()).as_ptr());
-            2
+            lua_error_msg(l, &format!("try_wait failed: {}", e));
         }
     }
 }
@@ -242,14 +243,10 @@ unsafe extern "C-unwind" fn process_child_stdout_read(l: *mut lua_State) -> i32 
                 {
                     let mut inner = child.inner.lock().unwrap();
                     match inner.try_wait() {
-                        Ok(Some(_)) => {
-                            // Child has exited, let actual read call run to get EOF (Ok(0))
-                        }
+                        Ok(Some(_)) => {}
                         _ => {
-                            // Child is still running, return WouldBlock immediately to prevent blocking the OS thread
                             lua_pushnil(l);
-                            lua_pushstring(l, c"WouldBlock".as_ptr());
-                            return 2;
+                            return 1;
                         }
                     }
                 }
@@ -263,13 +260,10 @@ unsafe extern "C-unwind" fn process_child_stdout_read(l: *mut lua_State) -> i32 
             }
             Err(e) if e.kind() == ErrorKind::WouldBlock => {
                 lua_pushnil(l);
-                lua_pushstring(l, c"WouldBlock".as_ptr());
-                2
+                1
             }
             Err(e) => {
-                lua_pushnil(l);
-                lua_pushstring(l, str_to_cstring(&e.to_string()).as_ptr());
-                2
+                lua_error_msg(l, &format!("stdout read failed: {}", e));
             }
         }
     } else {
@@ -311,14 +305,10 @@ unsafe extern "C-unwind" fn process_child_stderr_read(l: *mut lua_State) -> i32 
                 {
                     let mut inner = child.inner.lock().unwrap();
                     match inner.try_wait() {
-                        Ok(Some(_)) => {
-                            // Child has exited, let actual read call run to get EOF (Ok(0))
-                        }
+                        Ok(Some(_)) => {}
                         _ => {
-                            // Child is still running, return WouldBlock immediately to prevent blocking the OS thread
                             lua_pushnil(l);
-                            lua_pushstring(l, c"WouldBlock".as_ptr());
-                            return 2;
+                            return 1;
                         }
                     }
                 }
@@ -332,13 +322,10 @@ unsafe extern "C-unwind" fn process_child_stderr_read(l: *mut lua_State) -> i32 
             }
             Err(e) if e.kind() == ErrorKind::WouldBlock => {
                 lua_pushnil(l);
-                lua_pushstring(l, c"WouldBlock".as_ptr());
-                2
+                1
             }
             Err(e) => {
-                lua_pushnil(l);
-                lua_pushstring(l, str_to_cstring(&e.to_string()).as_ptr());
-                2
+                lua_error_msg(l, &format!("stderr read failed: {}", e));
             }
         }
     } else {
@@ -373,13 +360,10 @@ unsafe extern "C-unwind" fn process_child_stdin_write(l: *mut lua_State) -> i32 
             }
             Err(e) if e.kind() == ErrorKind::WouldBlock => {
                 lua_pushnil(l);
-                lua_pushstring(l, c"WouldBlock".as_ptr());
-                2
+                1
             }
             Err(e) => {
-                lua_pushnil(l);
-                lua_pushstring(l, str_to_cstring(&e.to_string()).as_ptr());
-                2
+                lua_error_msg(l, &format!("stdin write failed: {}", e));
             }
         }
     } else {
