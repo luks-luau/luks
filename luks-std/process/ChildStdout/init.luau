@@ -25,13 +25,19 @@ ChildStdoutMT.__index = ChildStdoutMT
 function ChildStdoutMT:read(buf: buffer, offset: number?, len: number?): Async.TaskFuture<number>
     local future, resolve, reject = Async.new_future()
     task.spawn(function()
-        while true do
-            if not self._handle then reject({ kind = "IoError", message = "pipe closed" }); break end
-            local n, err = native.child_stdout_read(self._handle, buf, offset or 0, len or buffer.len(buf))
-            if n then resolve(n); break
-            elseif err == "WouldBlock" then task.wait()
-            else reject({ kind = "IoError", message = err or "read failed" }); break end
-        end
+        local ok, err = pcall(function()
+            while true do
+                if not self._handle then error("pipe closed") end
+                local ok_, n = pcall(native.child_stdout_read, self._handle, buf, offset or 0, len or buffer.len(buf))
+                if ok_ then
+                    if n then return n end
+                    task.wait()
+                else
+                    error(tostring(n))
+                end
+            end
+        end)
+        if ok then resolve(err) else reject({ kind = "IoError", message = tostring(err) }) end
     end)
     return future
 end
