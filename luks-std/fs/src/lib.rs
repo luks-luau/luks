@@ -166,10 +166,7 @@ unsafe extern "C-unwind" fn fs_open(l: *mut lua_State) -> i32 {
             1
         }
         Err(e) => {
-            let err_msg = format!("{}", e);
-            lua_pushnil(l);
-            lua_pushstring(l, str_to_cstring(&err_msg).as_ptr());
-            2
+            lua_error_msg(l, &format!("{}", e));
         }
     }
 }
@@ -197,10 +194,7 @@ unsafe extern "C-unwind" fn fs_read(l: *mut lua_State) -> i32 {
                 1
             }
             Err(e) => {
-                let err_msg = format!("{}", e);
-                lua_pushnil(l);
-                lua_pushstring(l, str_to_cstring(&err_msg).as_ptr());
-                2
+                lua_error_msg(l, &format!("{}", e));
             }
         }
     } else {
@@ -231,10 +225,7 @@ unsafe extern "C-unwind" fn fs_write(l: *mut lua_State) -> i32 {
             1
         }
         Err(e) => {
-            let err_msg = format!("{}", e);
-            lua_pushnil(l);
-            lua_pushstring(l, str_to_cstring(&err_msg).as_ptr());
-            2
+            lua_error_msg(l, &format!("{}", e));
         }
     }
 }
@@ -255,10 +246,7 @@ unsafe extern "C-unwind" fn fs_seek(l: *mut lua_State) -> i32 {
             1
         }
         Err(e) => {
-            let err_msg = format!("{}", e);
-            lua_pushnil(l);
-            lua_pushstring(l, str_to_cstring(&err_msg).as_ptr());
-            2
+            lua_error_msg(l, &format!("{}", e));
         }
     }
 }
@@ -281,10 +269,7 @@ unsafe extern "C-unwind" fn fs_sync(l: *mut lua_State) -> i32 {
             1
         }
         Err(e) => {
-            let err_msg = format!("{}", e);
-            lua_pushnil(l);
-            lua_pushstring(l, str_to_cstring(&err_msg).as_ptr());
-            2
+            lua_error_msg(l, &format!("{}", e));
         }
     }
 }
@@ -298,10 +283,7 @@ unsafe extern "C-unwind" fn fs_set_len(l: *mut lua_State) -> i32 {
             1
         }
         Err(e) => {
-            let err_msg = format!("{}", e);
-            lua_pushnil(l);
-            lua_pushstring(l, str_to_cstring(&err_msg).as_ptr());
-            2
+            lua_error_msg(l, &format!("{}", e));
         }
     }
 }
@@ -316,10 +298,7 @@ unsafe extern "C-unwind" fn fs_remove_file(l: *mut lua_State) -> i32 {
             1
         }
         Err(e) => {
-            let err_msg = format!("{}", e);
-            lua_pushnil(l);
-            lua_pushstring(l, str_to_cstring(&err_msg).as_ptr());
-            2
+            lua_error_msg(l, &format!("{}", e));
         }
     }
 }
@@ -333,10 +312,7 @@ unsafe extern "C-unwind" fn fs_rename(l: *mut lua_State) -> i32 {
             1
         }
         Err(e) => {
-            let err_msg = format!("{}", e);
-            lua_pushnil(l);
-            lua_pushstring(l, str_to_cstring(&err_msg).as_ptr());
-            2
+            lua_error_msg(l, &format!("{}", e));
         }
     }
 }
@@ -350,10 +326,7 @@ unsafe extern "C-unwind" fn fs_copy(l: *mut lua_State) -> i32 {
             1
         }
         Err(e) => {
-            let err_msg = format!("{}", e);
-            lua_pushnil(l);
-            lua_pushstring(l, str_to_cstring(&err_msg).as_ptr());
-            2
+            lua_error_msg(l, &format!("{}", e));
         }
     }
 }
@@ -376,10 +349,7 @@ unsafe extern "C-unwind" fn fs_metadata(l: *mut lua_State) -> i32 {
             1
         }
         Err(e) => {
-            let err_msg = format!("{}", e);
-            lua_pushnil(l);
-            lua_pushstring(l, str_to_cstring(&err_msg).as_ptr());
-            2
+            lua_error_msg(l, &format!("{}", e));
         }
     }
 }
@@ -393,10 +363,7 @@ unsafe extern "C-unwind" fn fs_canonicalize(l: *mut lua_State) -> i32 {
             1
         }
         Err(e) => {
-            let err_msg = format!("{}", e);
-            lua_pushnil(l);
-            lua_pushstring(l, str_to_cstring(&err_msg).as_ptr());
-            2
+            lua_error_msg(l, &format!("{}", e));
         }
     }
 }
@@ -416,10 +383,7 @@ unsafe extern "C-unwind" fn fs_read_dir(l: *mut lua_State) -> i32 {
             1
         }
         Err(e) => {
-            let err_msg = format!("{}", e);
-            lua_pushnil(l);
-            lua_pushstring(l, str_to_cstring(&err_msg).as_ptr());
-            2
+            lua_error_msg(l, &format!("{}", e));
         }
     }
 }
@@ -450,10 +414,7 @@ unsafe extern "C-unwind" fn fs_readdir_next(l: *mut lua_State) -> i32 {
             1
         }
         Some(Err(e)) => {
-            let err_msg = format!("{}", e);
-            lua_pushnil(l);
-            lua_pushstring(l, str_to_cstring(&err_msg).as_ptr());
-            2
+            lua_error_msg(l, &format!("{}", e));
         }
         None => {
             lua_pushnil(l);
@@ -482,10 +443,7 @@ unsafe extern "C-unwind" fn fs_create_dir(l: *mut lua_State) -> i32 {
             1
         }
         Err(e) => {
-            let err_msg = format!("{}", e);
-            lua_pushnil(l);
-            lua_pushstring(l, str_to_cstring(&err_msg).as_ptr());
-            2
+            lua_error_msg(l, &format!("{}", e));
         }
     }
 }
@@ -508,10 +466,7 @@ unsafe extern "C-unwind" fn fs_remove_dir(l: *mut lua_State) -> i32 {
             1
         }
         Err(e) => {
-            let err_msg = format!("{}", e);
-            lua_pushnil(l);
-            lua_pushstring(l, str_to_cstring(&err_msg).as_ptr());
-            2
+            lua_error_msg(l, &format!("{}", e));
         }
     }
 }
@@ -527,10 +482,7 @@ unsafe extern "C-unwind" fn fs_hard_link(l: *mut lua_State) -> i32 {
             1
         }
         Err(e) => {
-            let err_msg = format!("{}", e);
-            lua_pushnil(l);
-            lua_pushstring(l, str_to_cstring(&err_msg).as_ptr());
-            2
+            lua_error_msg(l, &format!("{}", e));
         }
     }
 }
@@ -544,10 +496,7 @@ unsafe extern "C-unwind" fn fs_read_link(l: *mut lua_State) -> i32 {
             1
         }
         Err(e) => {
-            let err_msg = format!("{}", e);
-            lua_pushnil(l);
-            lua_pushstring(l, str_to_cstring(&err_msg).as_ptr());
-            2
+            lua_error_msg(l, &format!("{}", e));
         }
     }
 }
