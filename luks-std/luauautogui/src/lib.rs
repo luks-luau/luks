@@ -1202,7 +1202,7 @@ unsafe extern "C-unwind" fn lua_save_screenshot(l: *mut lua_State) -> i32 {
 unsafe extern "C-unwind" fn lua_capture_screenshot(l: *mut lua_State) -> i32 {
     match win32::capture_screen_raw(0, 0, win32::get_screen_size_raw().0, win32::get_screen_size_raw().1) {
         Some((w, h, pixels)) => {
-            let buf = lua_newbuffer(l, (pixels.len() * 4) as i64);
+            let buf = lua_newbuffer(l, (pixels.len() * 4) as usize);
             let buf_slice = std::slice::from_raw_parts_mut(buf as *mut u32, pixels.len());
             buf_slice.copy_from_slice(&pixels);
             lua_pushinteger(l, w as i64);
@@ -1255,7 +1255,10 @@ unsafe extern "C-unwind" fn lua_clipboard_get_text(l: *mut lua_State) -> i32 {
             lua_pushstring(l, c_text.as_ptr());
             1
         }
-        None => lua_pushstring(l, c"".as_ptr()),
+        None => {
+            lua_pushstring(l, c"".as_ptr());
+            1
+        }
     }
 }
 
@@ -1380,8 +1383,8 @@ unsafe extern "C-unwind" fn lua_find_image_on_screen(l: *mut lua_State) -> i32 {
             }
 
             if best_score >= threshold {
-                let cx = (sx + best_x + tmpl.width as i32 / 2) as i64;
-                let cy = (sy + best_y + tmpl.height as i32 / 2) as i64;
+                let cx = (sx + best_x as i32 + (tmpl.width as i32) / 2) as i64;
+                let cy = (sy + best_y as i32 + (tmpl.height as i32) / 2) as i64;
                 lua_pushinteger(l, cx);
                 lua_pushinteger(l, cy);
                 2
@@ -1448,8 +1451,7 @@ unsafe extern "C-unwind" fn lua_get_window_title(l: *mut lua_State) -> i32 {
     1
 }
 
-unsafe extern "C-unwind" fn lua_window_get_handle(l: *mut lua_State) -> i32 {
-    let hwnd = lua_touserdata(l, 1);
+unsafe extern "C-unwind" fn lua_window_get_handle(_l: *mut lua_State) -> i32 {
     0
 }
 
