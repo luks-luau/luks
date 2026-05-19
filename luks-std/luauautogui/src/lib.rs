@@ -179,6 +179,14 @@ mod win32 {
             lpEnumFunc: unsafe extern "system" fn(*mut c_void, *mut c_void, *mut RECT, isize) -> i32,
             dwData: isize,
         ) -> i32;
+        pub fn GetWindowLongA(hWnd: *mut c_void, nIndex: i32) -> i32;
+        pub fn SetWindowLongA(hWnd: *mut c_void, nIndex: i32, dwNewLong: i32) -> i32;
+        pub fn SetLayeredWindowAttributes(
+            hWnd: *mut c_void,
+            crKey: u32,
+            bAlpha: u8,
+            dwFlags: u32,
+        ) -> i32;
     }
 
     #[link(name = "kernel32")]
@@ -810,6 +818,37 @@ mod win32 {
             IsWindowVisible(hwnd) != 0
         }
     }
+
+    const GWL_EXSTYLE: i32 = -20;
+    const WS_EX_LAYERED: i32 = 0x80000;
+    const WS_EX_TRANSPARENT: i32 = 0x20;
+    const LWA_ALPHA: u32 = 0x2;
+
+    pub fn window_set_transparency_raw(hwnd: *mut c_void, alpha: u8) -> bool {
+        unsafe {
+            if hwnd.is_null() {
+                return false;
+            }
+            let style = GetWindowLongA(hwnd, GWL_EXSTYLE);
+            SetWindowLongA(hwnd, GWL_EXSTYLE, style | WS_EX_LAYERED);
+            SetLayeredWindowAttributes(hwnd, 0, alpha, LWA_ALPHA) != 0
+        }
+    }
+
+    pub fn window_set_click_through_raw(hwnd: *mut c_void, enabled: bool) -> bool {
+        unsafe {
+            if hwnd.is_null() {
+                return false;
+            }
+            let style = GetWindowLongA(hwnd, GWL_EXSTYLE);
+            if enabled {
+                SetWindowLongA(hwnd, GWL_EXSTYLE, style | WS_EX_LAYERED | WS_EX_TRANSPARENT);
+            } else {
+                SetWindowLongA(hwnd, GWL_EXSTYLE, style & !(WS_EX_LAYERED | WS_EX_TRANSPARENT));
+            }
+            true
+        }
+    }
 }
 
 #[cfg(not(target_os = "windows"))]
@@ -887,6 +926,12 @@ mod win32 {
         false
     }
     pub fn is_window_visible_raw(_hwnd: *mut std::ffi::c_void) -> bool {
+        false
+    }
+    pub fn window_set_transparency_raw(_hwnd: *mut std::ffi::c_void, _alpha: u8) -> bool {
+        false
+    }
+    pub fn window_set_click_through_raw(_hwnd: *mut std::ffi::c_void, _enabled: bool) -> bool {
         false
     }
 }
@@ -1529,12 +1574,34 @@ unsafe extern "C-unwind" fn lua_window_create(l: *mut lua_State) -> i32 {
     1
 }
 
+unsafe extern "C-unwind" fn lua_window_set_transparency(l: *mut lua_State) -> i32 {
+    let hwnd = lua_touserdata(l, 1);
+    let alpha = luaL_optinteger(l, 2, 255) as u8;
+    if hwnd.is_null() {
+        lua_pushboolean(l, 0);
+        return 1;
+    }
+    lua_pushboolean(l, if win32::window_set_transparency_raw(hwnd, alpha) { 1 } else { 0 });
+    1
+}
+
+unsafe extern "C-unwind" fn lua_window_set_click_through(l: *mut lua_State) -> i32 {
+    let hwnd = lua_touserdata(l, 1);
+    let enabled = lua_toboolean(l, 2) != 0;
+    if hwnd.is_null() {
+        lua_pushboolean(l, 0);
+        return 1;
+    }
+    lua_pushboolean(l, if win32::window_set_click_through_raw(hwnd, enabled) { 1 } else { 0 });
+    1
+}
+
 #[unsafe(no_mangle)]
 pub unsafe extern "C-unwind" fn luau_export(l: *mut lua_State, api: *const LuauAPI) -> i32 {
     unsafe {
         init_api(api);
 
-        lua_createtable(l, 0, 34);
+        lua_createtable(l, 0, 36);
 
         lua_pushcfunction(l, lua_change_debug_state);
         lua_setfield(l, -2, c"change_debug_state".as_ptr());
@@ -1637,6 +1704,12 @@ pub unsafe extern "C-unwind" fn luau_export(l: *mut lua_State, api: *const LuauA
 
         lua_pushcfunction(l, lua_window_create);
         lua_setfield(l, -2, c"window_create".as_ptr());
+
+        lua_pushcfunction(l, lua_window_set_transparency);
+        lua_setfield(l, -2, c"window_set_transparency".as_ptr());
+
+        lua_pushcfunction(l, lua_window_set_click_through);
+        lua_setfield(l, -2, c"window_set_click_through".as_ptr());
 
         1
     }
