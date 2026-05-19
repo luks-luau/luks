@@ -18,7 +18,7 @@ export type FsError = {
 --[[
     Status of a TaskFuture.
 ]]
-export type FutureState = "Pending" | "Resolved" | "Rejected"
+export type FutureState = "Pending" | "Resolved" | "Rejected" | "Cancelled"
 
 --[[
     Holds the data signals and state for a TaskFuture.
@@ -47,6 +47,12 @@ export type TaskFutureData<T> = {
     _value: any,
     --[[ The error object (if Rejected). ]]
     _error: FsError?,
+    --[[ Internal raw signal for data (used by cancel). ]]
+    _data_sig: Signal.SignalInternal<any>,
+    --[[ Internal raw signal for error (used by cancel). ]]
+    _err_sig: Signal.SignalInternal<FsError>,
+    --[[ Internal raw signal for completion (used by cancel). ]]
+    _comp_sig: Signal.SignalInternal<()>,
 }
 
 --[[
@@ -276,6 +282,19 @@ function TaskFutureMT:inspect_err<T>(callback: (FsError) -> ()): TaskFuture<T>
 end
 
 --[[
+    Cancels the future, preventing any pending callbacks from firing.
+    Disconnects all internal signals to free captured closures.
+]]
+function TaskFutureMT:cancel()
+    local self_typed = self :: TaskFuture<any>
+    if self_typed._state ~= "Pending" then return end
+    self_typed._state = "Cancelled"
+    self_typed._data_sig:DisconnectAll()
+    self_typed._err_sig:DisconnectAll()
+    self_typed._comp_sig:DisconnectAll()
+end
+
+--[[
     Internal implementation of .Wait().
 ]]
 function TaskFutureMT:Wait(): any
@@ -285,6 +304,8 @@ function TaskFutureMT:Wait(): any
         return self_typed._value, true
     elseif self_typed._state == "Rejected" then
         return self_typed._error, false
+    elseif self_typed._state == "Cancelled" then
+        return ({ kind = "Cancelled", message = "future was cancelled" } :: FsError), false
     end
 
     local thread = coroutine.running()
@@ -345,6 +366,9 @@ function Async.new_future<T>(): (TaskFuture<T>, (T) -> (), (FsError) -> ())
         _state = "Pending" :: FutureState,
         _value = nil :: any,
         _error = nil :: FsError?,
+        _data_sig = data_sig,
+        _err_sig = err_sig,
+        _comp_sig = comp_sig,
     }
     setmetatable(future, TaskFutureMT)
 
