@@ -12,7 +12,7 @@ return function(expect)
             -- Seek from Start
             local pos = file:seek({ kind = "Start", pos = 5 }):expect("seek start failed")
             expect.eq(pos, 5)
-            expect.eq(file:position(), 5)
+            expect.eq(file:position():expect("position failed"), 5)
             
             -- Seek from Current
             pos = file:seek({ kind = "Current", pos = -2 }):expect("seek current failed")

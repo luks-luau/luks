@@ -193,8 +193,8 @@ end
     @param self The cursor instance
     @return The numeric position
 ]]
-function CursorMT:position(): number
-    return (self :: any)._pos
+function CursorMT:position(): Async.TaskFuture<number>
+    return Async.resolved((self :: any)._pos)
 end
 
 -- Export metatable

@@ -21,10 +21,10 @@ return function(expect)
             local c = IO.Cursor.new("hello world")
             c:read(buffer.create(6)):unwrap() -- Consume "hello "
             
-            expect.eq(c:position(), 6)
+            expect.eq(c:position():unwrap(), 6)
             local rest = c:read_to_end():unwrap()
             expect.eq(buffer.tostring(rest), "world")
-            expect.eq(c:position(), 11)
+            expect.eq(c:position():unwrap(), 11)
         end)
 
         h.test("read_exact failure at EOF", function()

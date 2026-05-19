@@ -116,7 +116,7 @@ export type Seeker = {
         @param self The seeker instance
         @return The current position in bytes from the start
     ]]
-    position: (self: Seeker) -> number,
+    position: (self: Seeker) -> Async.TaskFuture<number>,
 }
 
 --[[ Interface for buffered reading operations. ]]
