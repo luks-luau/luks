@@ -148,7 +148,6 @@ The workspace hosts a collection of highly-optimized native extensions implement
 
 - **[`async`](https://github.com/luks-luau/luks/blob/main/luks-std/async/README.md)**: Foundational asynchronous primitives, signals, and Rust-style futures.
 - **[`env`](https://github.com/luks-luau/luks/blob/main/luks-std/env/README.md)**: Access to process environment, CLI arguments, and host system information.
-- **[`events`](https://github.com/luks-luau/luks/blob/main/luks-std/events/README.md)**: Centralized event loop and high-performance polling service.
 - **[`fs`](https://github.com/luks-luau/luks/blob/main/luks-std/fs/README.md)**: Native filesystem operations following Rust `std::fs` with full async support.
 - **[`io`](https://github.com/luks-luau/luks/blob/main/luks-std/io/README.md)**: Rust-style asynchronous I/O primitives including `Reader`, `Writer`, and `BufRead` traits.
 - **[`process`](https://github.com/luks-luau/luks/blob/main/luks-std/process/README.md)**: High-performance subprocess execution, environment mapping, and system telemetry.
