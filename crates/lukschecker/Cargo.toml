@@ -11,3 +11,7 @@ crate-type = ["cdylib"]
 
 [dependencies]
 luau-analyzer-sys = { path = "../luau-analyzer-sys" }
+serde = { version = "1", features = ["derive"] }
+bincode = "1"
+blake3 = "1"
+dirs = "5"

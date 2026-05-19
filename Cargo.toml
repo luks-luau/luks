@@ -15,6 +15,7 @@ members = [
     "luks-std/io",
     "luks-std/fs",
     "luks-std/net",
+    "luks-std/luauautogui",
     "crates/luks-module-sys",
     "crates/luau-analyzer-sys",
     "crates/lukschecker"
