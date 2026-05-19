@@ -27,8 +27,8 @@ function ChildMT:kill(): Async.TaskFuture<any>
     local future, resolve, reject = Async.new_future()
     task.defer(function()
         if not self._handle then reject({ kind = "IoError", message = "process already closed" }); return end
-        local ok, err = native.child_kill(self._handle)
-        if ok then resolve(nil) else reject({ kind = "IoError", message = err or "kill failed" }) end
+        local ok, err = pcall(native.child_kill, self._handle)
+        if ok then resolve(nil) else reject({ kind = "IoError", message = tostring(err) }) end
     end)
     return future
 end
@@ -42,10 +42,12 @@ function ChildMT:try_wait(): Async.TaskFuture<types.ExitStatus?>
     local future: Async.TaskFuture<types.ExitStatus?>, resolve: (types.ExitStatus?) -> (), reject: (Async.FsError) -> () = Async.new_future()
     task.defer(function()
         if not self._handle then reject({ kind = "IoError", message = "process already closed" }); return end
-        local code, err = native.child_try_wait(self._handle)
-        if err then reject({ kind = "IoError", message = err })
-        elseif code then resolve(ExitStatus.new(code))
-        else resolve(nil) end
+        local ok, result = pcall(native.child_try_wait, self._handle)
+        if ok then
+            if result then resolve(ExitStatus.new(result)) else resolve(nil) end
+        else
+            reject({ kind = "IoError", message = tostring(result) })
+        end
     end)
     return future
 end
@@ -58,25 +60,35 @@ end
 function ChildMT:wait(): Async.TaskFuture<types.ExitStatus>
     local future, resolve, reject = Async.new_future()
     task.spawn(function()
-        while true do
-            if not self._handle then reject({ kind = "IoError", message = "process already closed" }); break end
-            local code, err = native.child_try_wait(self._handle)
-            if err then reject({ kind = "IoError", message = err }); break
-            elseif code then resolve(ExitStatus.new(code)); break
-            else task.wait() end
-        end
+        local ok, err = pcall(function()
+            while true do
+                if not self._handle then error("process already closed") end
+                local ok_, result = pcall(native.child_try_wait, self._handle)
+                if ok_ then
+                    if result then return ExitStatus.new(result) end
+                    task.wait()
+                else
+                    error(tostring(result))
+                end
+            end
+        end)
+        if ok then resolve(err) else reject({ kind = "IoError", message = tostring(err) }) end
     end)
     return future
 end
 
 --[[
     Closes the child process handle and releases native resources.
+    Also nullifies stdin/stdout/stderr sub-handles to prevent dangling pointers.
     @param self The child process instance
 ]]
 function ChildMT:close()
     if self._handle then
         native.child_free(self._handle)
         self._handle = nil
+        if self.stdin then (self.stdin :: any)._handle = nil end
+        if self.stdout then (self.stdout :: any)._handle = nil end
+        if self.stderr then (self.stderr :: any)._handle = nil end
     end
 end
 
