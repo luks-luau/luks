@@ -6,7 +6,7 @@ local Child = require("Child")
 
 local native = (function()
     local function try_load(p) local s, n = pcall(dlopen, p); return if s then n else nil end
-    return try_load("@self/lib/luks_process")
+    return try_load("@self/../lib/luks_process")
         or try_load("@self/../../../target/release/luks_process")
         or try_load("@self/../../../target/debug/luks_process")
         or error("Could not load Process native library")
