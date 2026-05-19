@@ -134,10 +134,7 @@ unsafe extern "C-unwind" fn net_tcp_bind(l: *mut lua_State) -> i32 {
             1
         }
         Err(e) => {
-            lua_pushnil(l);
-            let err_msg = e.to_string();
-            lua_pushstring(l, str_to_cstring(&err_msg).as_ptr());
-            2
+            lua_error_msg(l, &e.to_string());
         }
     }
 }
@@ -159,10 +156,7 @@ unsafe extern "C-unwind" fn net_tcp_listener_local_addr(l: *mut lua_State) -> i3
             1
         }
         Err(e) => {
-            lua_pushnil(l);
-            let err_msg = e.to_string();
-            lua_pushstring(l, str_to_cstring(&err_msg).as_ptr());
-            2
+            lua_error_msg(l, &e.to_string());
         }
     }
 }
@@ -176,10 +170,7 @@ unsafe extern "C-unwind" fn net_tcp_listener_set_ttl(l: *mut lua_State) -> i32 {
             1
         }
         Err(e) => {
-            lua_pushnil(l);
-            let err_msg = e.to_string();
-            lua_pushstring(l, str_to_cstring(&err_msg).as_ptr());
-            2
+            lua_error_msg(l, &e.to_string());
         }
     }
 }
@@ -192,10 +183,7 @@ unsafe extern "C-unwind" fn net_tcp_listener_ttl(l: *mut lua_State) -> i32 {
             1
         }
         Err(e) => {
-            lua_pushnil(l);
-            let err_msg = e.to_string();
-            lua_pushstring(l, str_to_cstring(&err_msg).as_ptr());
-            2
+            lua_error_msg(l, &e.to_string());
         }
     }
 }
@@ -224,10 +212,7 @@ unsafe extern "C-unwind" fn net_tcp_accept(l: *mut lua_State) -> i32 {
             2
         }
         Err(e) => {
-            lua_pushnil(l);
-            let err_msg = e.to_string();
-            lua_pushstring(l, str_to_cstring(&err_msg).as_ptr());
-            2
+            lua_error_msg(l, &e.to_string());
         }
     }
 }
@@ -253,17 +238,11 @@ unsafe extern "C-unwind" fn net_tcp_connect(l: *mut lua_State) -> i32 {
                 1
             }
             Err(e) => {
-                lua_pushnil(l);
-                let err_msg = e.to_string();
-                lua_pushstring(l, str_to_cstring(&err_msg).as_ptr());
-                2
+                lua_error_msg(l, &e.to_string());
             }
         },
         Err(e) => {
-            lua_pushnil(l);
-            let err_msg = e.to_string();
-            lua_pushstring(l, str_to_cstring(&err_msg).as_ptr());
-            2
+            lua_error_msg(l, &e.to_string());
         }
     }
 }
@@ -286,10 +265,7 @@ unsafe extern "C-unwind" fn net_tcp_stream_peer_addr(l: *mut lua_State) -> i32 {
             1
         }
         Err(e) => {
-            lua_pushnil(l);
-            let err_msg = e.to_string();
-            lua_pushstring(l, str_to_cstring(&err_msg).as_ptr());
-            2
+            lua_error_msg(l, &e.to_string());
         }
     }
 }
@@ -303,10 +279,7 @@ unsafe extern "C-unwind" fn net_tcp_stream_local_addr(l: *mut lua_State) -> i32 
             1
         }
         Err(e) => {
-            lua_pushnil(l);
-            let err_msg = e.to_string();
-            lua_pushstring(l, str_to_cstring(&err_msg).as_ptr());
-            2
+            lua_error_msg(l, &e.to_string());
         }
     }
 }
@@ -321,10 +294,7 @@ unsafe extern "C-unwind" fn net_tcp_stream_set_ttl(l: *mut lua_State) -> i32 {
             1
         }
         Err(e) => {
-            lua_pushnil(l);
-            let err_msg = e.to_string();
-            lua_pushstring(l, str_to_cstring(&err_msg).as_ptr());
-            2
+            lua_error_msg(l, &e.to_string());
         }
     }
 }
@@ -338,10 +308,7 @@ unsafe extern "C-unwind" fn net_tcp_stream_ttl(l: *mut lua_State) -> i32 {
             1
         }
         Err(e) => {
-            lua_pushnil(l);
-            let err_msg = e.to_string();
-            lua_pushstring(l, str_to_cstring(&err_msg).as_ptr());
-            2
+            lua_error_msg(l, &e.to_string());
         }
     }
 }
@@ -362,10 +329,7 @@ unsafe extern "C-unwind" fn net_tcp_stream_shutdown(l: *mut lua_State) -> i32 {
             1
         }
         Err(e) => {
-            lua_pushnil(l);
-            let err_msg = e.to_string();
-            lua_pushstring(l, str_to_cstring(&err_msg).as_ptr());
-            2
+            lua_error_msg(l, &e.to_string());
         }
     }
 }
@@ -380,10 +344,7 @@ unsafe extern "C-unwind" fn net_tcp_stream_set_nodelay(l: *mut lua_State) -> i32
             1
         }
         Err(e) => {
-            lua_pushnil(l);
-            let err_msg = e.to_string();
-            lua_pushstring(l, str_to_cstring(&err_msg).as_ptr());
-            2
+            lua_error_msg(l, &e.to_string());
         }
     }
 }
@@ -397,10 +358,7 @@ unsafe extern "C-unwind" fn net_tcp_stream_nodelay(l: *mut lua_State) -> i32 {
             1
         }
         Err(e) => {
-            lua_pushnil(l);
-            let err_msg = e.to_string();
-            lua_pushstring(l, str_to_cstring(&err_msg).as_ptr());
-            2
+            lua_error_msg(l, &e.to_string());
         }
     }
 }
@@ -495,10 +453,7 @@ unsafe extern "C-unwind" fn net_tcp_write(l: *mut lua_State) -> i32 {
             2
         }
         Err(e) => {
-            lua_pushnil(l);
-            let err_msg = e.to_string();
-            lua_pushstring(l, str_to_cstring(&err_msg).as_ptr());
-            2
+            lua_error_msg(l, &e.to_string());
         }
     }
 }
@@ -523,10 +478,7 @@ unsafe extern "C-unwind" fn net_udp_bind(l: *mut lua_State) -> i32 {
             1
         }
         Err(e) => {
-            lua_pushnil(l);
-            let err_msg = e.to_string();
-            lua_pushstring(l, str_to_cstring(&err_msg).as_ptr());
-            2
+            lua_error_msg(l, &e.to_string());
         }
     }
 }
@@ -549,10 +501,7 @@ unsafe extern "C-unwind" fn net_udp_socket_local_addr(l: *mut lua_State) -> i32 
             1
         }
         Err(e) => {
-            lua_pushnil(l);
-            let err_msg = e.to_string();
-            lua_pushstring(l, str_to_cstring(&err_msg).as_ptr());
-            2
+            lua_error_msg(l, &e.to_string());
         }
     }
 }
@@ -566,10 +515,7 @@ unsafe extern "C-unwind" fn net_udp_socket_peer_addr(l: *mut lua_State) -> i32 {
             1
         }
         Err(e) => {
-            lua_pushnil(l);
-            let err_msg = e.to_string();
-            lua_pushstring(l, str_to_cstring(&err_msg).as_ptr());
-            2
+            lua_error_msg(l, &e.to_string());
         }
     }
 }
@@ -584,10 +530,7 @@ unsafe extern "C-unwind" fn net_udp_socket_set_ttl(l: *mut lua_State) -> i32 {
             1
         }
         Err(e) => {
-            lua_pushnil(l);
-            let err_msg = e.to_string();
-            lua_pushstring(l, str_to_cstring(&err_msg).as_ptr());
-            2
+            lua_error_msg(l, &e.to_string());
         }
     }
 }
@@ -601,10 +544,7 @@ unsafe extern "C-unwind" fn net_udp_socket_ttl(l: *mut lua_State) -> i32 {
             1
         }
         Err(e) => {
-            lua_pushnil(l);
-            let err_msg = e.to_string();
-            lua_pushstring(l, str_to_cstring(&err_msg).as_ptr());
-            2
+            lua_error_msg(l, &e.to_string());
         }
     }
 }
@@ -619,10 +559,7 @@ unsafe extern "C-unwind" fn net_udp_socket_set_broadcast(l: *mut lua_State) -> i
             1
         }
         Err(e) => {
-            lua_pushnil(l);
-            let err_msg = e.to_string();
-            lua_pushstring(l, str_to_cstring(&err_msg).as_ptr());
-            2
+            lua_error_msg(l, &e.to_string());
         }
     }
 }
@@ -636,10 +573,7 @@ unsafe extern "C-unwind" fn net_udp_socket_broadcast(l: *mut lua_State) -> i32 {
             1
         }
         Err(e) => {
-            lua_pushnil(l);
-            let err_msg = e.to_string();
-            lua_pushstring(l, str_to_cstring(&err_msg).as_ptr());
-            2
+            lua_error_msg(l, &e.to_string());
         }
     }
 }
@@ -668,10 +602,7 @@ unsafe extern "C-unwind" fn net_udp_send_to(l: *mut lua_State) -> i32 {
             2
         }
         Err(e) => {
-            lua_pushnil(l);
-            let err_msg = e.to_string();
-            lua_pushstring(l, str_to_cstring(&err_msg).as_ptr());
-            2
+            lua_error_msg(l, &e.to_string());
         }
     }
 }
@@ -740,10 +671,7 @@ unsafe extern "C-unwind" fn net_udp_connect(l: *mut lua_State) -> i32 {
             1
         }
         Err(e) => {
-            lua_pushnil(l);
-            let err_msg = e.to_string();
-            lua_pushstring(l, str_to_cstring(&err_msg).as_ptr());
-            2
+            lua_error_msg(l, &e.to_string());
         }
     }
 }
@@ -771,10 +699,7 @@ unsafe extern "C-unwind" fn net_udp_send(l: *mut lua_State) -> i32 {
             2
         }
         Err(e) => {
-            lua_pushnil(l);
-            let err_msg = e.to_string();
-            lua_pushstring(l, str_to_cstring(&err_msg).as_ptr());
-            2
+            lua_error_msg(l, &e.to_string());
         }
     }
 }
