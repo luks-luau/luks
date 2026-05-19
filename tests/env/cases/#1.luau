@@ -1,3 +1,4 @@
+local FS = require("../../../luks-std/fs")
 local h = require("../../helpers")
 local Env = require("../../../luks-std/env")
 
@@ -42,21 +43,24 @@ return function(expect)
             local original = Env.currentDir()
             expect.not_nil(original)
             
-            local temp = Env.tempDir()
-            local ok = Env.setCurrentDir(temp)
+            local test_dir = "_luks_test_cd_" .. tostring(math.random(10000, 99999))
+            FS.create_dir(test_dir):expect("failed to create test dir")
+            local abs_dir = FS.canonicalize(test_dir):expect("failed to canonicalize")
+            
+            local ok = Env.setCurrentDir(abs_dir)
             expect.true_(ok)
             
             local new_dir = Env.currentDir()
-            -- Normalize by removing trailing slashes for comparison
             local function normalize(p)
                 return p:gsub("[\\/]+$", "")
             end
-            
-            expect.eq(normalize(new_dir), normalize(temp))
+            expect.eq(normalize(new_dir), normalize(abs_dir))
             
             -- Restore
             Env.setCurrentDir(original)
             expect.eq(normalize(Env.currentDir()), normalize(original))
+            
+            FS.remove_dir(abs_dir):expect("cleanup failed")
         end)
 
         h.test("tempDir: returns a path", function()
