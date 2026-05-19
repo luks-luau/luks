@@ -1,13 +1,19 @@
 --!strict
 local Process = require("../../../luks-std/Process")
+local Env = require("../../../luks-std/env")
 local h = require("../../helpers")
+local function sh(cmd_str)
+    if Env.consts.OS == "windows" then
+        return Process.Command.new("cmd.exe"):args({"/C", cmd_str})
+    else
+        return Process.Command.new("sh"):args({"-c", cmd_str})
+    end
+end
 
 return function(expect)
     h.suite("PROCESS - EXTENDED API", function()
         h.test("stdin piping", function()
-            -- use 'sort' to echo back stdin
-            local cmd = Process.Command.new("cmd.exe")
-                :args({"/C", "sort"})
+            local cmd = sh("sort")
                 :stdin(Process.Stdio.piped())
                 :stdout(Process.Stdio.piped())
             
@@ -35,8 +41,10 @@ return function(expect)
         end)
 
         h.test("environment variables", function()
-            local cmd = Process.Command.new("cmd.exe")
-                :args({"/C", "echo %LUKS_TEST_VAR%"})
+            local echo_var = if Env.consts.OS == "windows"
+                then "echo %LUKS_TEST_VAR%"
+                else "echo $LUKS_TEST_VAR"
+            local cmd = sh(echo_var)
                 :env("LUKS_TEST_VAR", "it_works")
                 :stdout(Process.Stdio.piped())
             
@@ -55,9 +63,10 @@ return function(expect)
         end)
 
         h.test("current working directory", function()
-            local cmd = Process.Command.new("cmd.exe")
-                :args({"/C", "cd"})
-                :cwd("C:\\")
+            local pwd_cmd = if Env.consts.OS == "windows" then "cd" else "pwd"
+            local root = if Env.consts.OS == "windows" then "C:\\" else "/"
+            local cmd = sh(pwd_cmd)
+                :cwd(root)
                 :stdout(Process.Stdio.piped())
             
             local child = cmd:spawn():expect("spawn failed")
@@ -69,15 +78,13 @@ return function(expect)
                 result ..= buffer.readstring(buf, 0, n)
             end
             
-            expect.true_(string.find(result, "C:\\") ~= nil, "should be in C:\\")
+            expect.true_(string.find(result, root) ~= nil, "should be in root")
             child:wait():expect("wait failed")
             child:close()
         end)
 
         h.test("stderr capturing", function()
-            -- try to cd into a non-existent dir to trigger stderr
-            local cmd = Process.Command.new("cmd.exe")
-                :args({"/C", "cd", "non_existent_folder_luks_123"})
+            local cmd = sh("cd non_existent_folder_luks_123")
                 :stderr(Process.Stdio.piped())
             
             local child = cmd:spawn():expect("spawn failed")

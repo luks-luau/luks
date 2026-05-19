@@ -1,12 +1,19 @@
 --!strict
 local Process = require("../../../luks-std/Process")
+local Env = require("../../../luks-std/env")
 local h = require("../../helpers")
+local function sh(cmd_str)
+    if Env.consts.OS == "windows" then
+        return Process.Command.new("cmd.exe"):args({"/C", cmd_str})
+    else
+        return Process.Command.new("sh"):args({"-c", cmd_str})
+    end
+end
 
 return function(expect)
     h.suite("PROCESS - RUST STYLE ENGINE", function()
         h.test("command builder and spawn", function()
-            local cmd = Process.Command.new("cmd.exe")
-                :args({"/C", "echo", "hello luks"})
+            local cmd = sh("echo hello luks")
             
             local child = cmd:spawn():expect("spawn failed")
             expect.true_(child.id > 0)
@@ -19,8 +26,7 @@ return function(expect)
         end)
 
         h.test("stdout streaming", function()
-            local cmd = Process.Command.new("cmd.exe")
-                :args({"/C", "echo line 1 && echo line 2"})
+            local cmd = sh("echo line 1 && echo line 2")
                 :stdout(Process.Stdio.piped())
             
             local child = cmd:spawn():expect("spawn failed")
@@ -37,7 +43,7 @@ return function(expect)
                 result ..= buffer.readstring(buf, 0, n)
             end
             
-            expect.true_(string.find(result, "line 1") ~= nil, "should contain line 1")
+            expect.true_(string.find(result, "line 1") ~= nil , "should contain line 1")
             expect.true_(string.find(result, "line 2") ~= nil, "should contain line 2")
             
             child:wait():expect("wait failed")
@@ -45,8 +51,8 @@ return function(expect)
         end)
 
         h.test("try_wait and kill", function()
-            local cmd = Process.Command.new("cmd.exe")
-                :args({"/C", "pause"})
+            local pause_cmd = if Env.consts.OS == "windows" then "pause" else "sleep 30"
+            local cmd = sh(pause_cmd)
             
             local child = cmd:spawn():expect("spawn failed")
             

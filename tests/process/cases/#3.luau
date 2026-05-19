@@ -1,7 +1,15 @@
 --!strict
 local Process = require("../../../luks-std/Process")
+local Env = require("../../../luks-std/env")
 local Async = require("../../../luks-std/async")
 local h = require("../../helpers")
+local function sh(cmd_str)
+    if Env.consts.OS == "windows" then
+        return Process.Command.new("cmd.exe"):args({"/C", cmd_str})
+    else
+        return Process.Command.new("sh"):args({"-c", cmd_str})
+    end
+end
 
 return function(expect)
     h.suite("PROCESS - STRESS TEST", function()
@@ -15,8 +23,7 @@ return function(expect)
                 
                 task.spawn(function()
                     local ok, err = pcall(function()
-                        local cmd = Process.Command.new("cmd.exe")
-                            :args({"/C", "echo", "stress " .. i})
+                        local cmd = sh("echo stress " .. i)
                             :stdout(Process.Stdio.piped())
                         
                         local child = cmd:spawn():expect("spawn failed " .. i)
