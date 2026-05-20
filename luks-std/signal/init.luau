@@ -222,7 +222,7 @@ function ConnectionMT:Disconnect()
 
     local signal = self._signal
     if signal._head == self then
-        signal._head = nil
+        signal._head = self._next
     else
         local current = signal._head
         while current and current._next ~= self do
