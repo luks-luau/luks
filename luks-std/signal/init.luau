@@ -58,6 +58,7 @@ type ConnectionInternal<T...> = {
 
 export type SignalInternal<T...> = {
     _head: ConnectionInternal<T...>?,
+    _firing: boolean,
     --[[
         Connects a callback to be fired when the signal fires.
         @param self The signal instance
@@ -180,13 +181,22 @@ end
     @param ... The arguments to pass to callbacks
 ]]
 function SignalMT:Fire<T...>(...: T...)
+    if self._firing then
+        return
+    end
+    self._firing = true
+    local connections = {}
     local current = self._head
     while current do
-        if current.Connected then
-            task.spawn(current._callback, ...)
-        end
+        table.insert(connections, current)
         current = current._next
     end
+    for _, conn in ipairs(connections) do
+        if conn.Connected then
+            task.spawn(conn._callback, ...)
+        end
+    end
+    self._firing = false
 end
 
 --[[
@@ -272,6 +282,7 @@ local Signal = {}
 function Signal.new<T...>(): SignalInternal<T...>
     local signal = {
         _head = nil :: ConnectionInternal<T...>?,
+        _firing = false,
     }
     setmetatable(signal, SignalMT)
     return (signal :: any) :: SignalInternal<T...>
