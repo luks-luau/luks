@@ -254,7 +254,8 @@ async fn task_wait(lua: Lua, secs: Option<f64>) -> LuaResult<f64> {
 }
 
 async fn task_wait_inner(_: Lua, secs: Option<f64>) -> LuaResult<f64> {
-    let duration = Duration::from_secs_f64(secs.unwrap_or_default());
+    let secs = secs.unwrap_or_default().max(0.0);
+    let duration = Duration::from_secs_f64(secs);
     let duration = duration.max(Duration::from_millis(1));
     yield_now().await;
     let before = Instant::now();
