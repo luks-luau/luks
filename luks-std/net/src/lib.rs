@@ -139,6 +139,15 @@ unsafe extern "C-unwind" fn net_tcp_bind(l: *mut lua_State) -> i32 {
     }
 }
 
+unsafe extern "C-unwind" fn net_tcp_listener_close(l: *mut lua_State) -> i32 {
+    let ud_ptr = lua_touserdata(l, 1) as *mut *mut LuauTcpListener;
+    if !ud_ptr.is_null() && !(*ud_ptr).is_null() {
+        let _ = Box::from_raw(*ud_ptr);
+        *ud_ptr = std::ptr::null_mut();
+    }
+    0
+}
+
 unsafe extern "C-unwind" fn net_tcp_listener_gc(l: *mut lua_State) -> i32 {
     let ud_ptr = lua_touserdata(l, 1) as *mut *mut LuauTcpListener;
     if !ud_ptr.is_null() && !(*ud_ptr).is_null() {
@@ -245,6 +254,15 @@ unsafe extern "C-unwind" fn net_tcp_connect(l: *mut lua_State) -> i32 {
             lua_error_msg(l, &e.to_string());
         }
     }
+}
+
+unsafe extern "C-unwind" fn net_tcp_stream_close(l: *mut lua_State) -> i32 {
+    let ud_ptr = lua_touserdata(l, 1) as *mut *mut LuauTcpStream;
+    if !ud_ptr.is_null() && !(*ud_ptr).is_null() {
+        let _ = Box::from_raw(*ud_ptr);
+        *ud_ptr = std::ptr::null_mut();
+    }
+    0
 }
 
 unsafe extern "C-unwind" fn net_tcp_stream_gc(l: *mut lua_State) -> i32 {
@@ -745,6 +763,8 @@ pub unsafe extern "C-unwind" fn luau_export(l: *mut lua_State, api: *const LuauA
         lua_setfield(l, -2, c"tcp_bind".as_ptr());
         lua_pushcfunction(l, net_tcp_accept);
         lua_setfield(l, -2, c"tcp_accept".as_ptr());
+        lua_pushcfunction(l, net_tcp_listener_close);
+        lua_setfield(l, -2, c"tcp_listener_close".as_ptr());
         lua_pushcfunction(l, net_tcp_listener_local_addr);
         lua_setfield(l, -2, c"tcp_listener_local_addr".as_ptr());
         lua_pushcfunction(l, net_tcp_listener_set_ttl);
@@ -754,6 +774,8 @@ pub unsafe extern "C-unwind" fn luau_export(l: *mut lua_State, api: *const LuauA
 
         lua_pushcfunction(l, net_tcp_connect);
         lua_setfield(l, -2, c"tcp_connect".as_ptr());
+        lua_pushcfunction(l, net_tcp_stream_close);
+        lua_setfield(l, -2, c"tcp_stream_close".as_ptr());
         lua_pushcfunction(l, net_tcp_read);
         lua_setfield(l, -2, c"tcp_read".as_ptr());
         lua_pushcfunction(l, net_tcp_write);

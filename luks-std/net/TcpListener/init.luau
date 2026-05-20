@@ -94,6 +94,10 @@ end
     @param self The TCP listener instance
 ]]
 function TcpListenerMT:close()
+    local handle = (self :: any)._handle
+    if handle then
+        pcall(native.tcp_listener_close, handle)
+    end
     (self :: any)._handle = nil
 end
 

@@ -195,6 +195,10 @@ end
     @param self The TCP stream instance
 ]]
 function TcpStreamMT:close()
+    local handle = (self :: any)._handle
+    if handle then
+        pcall(native.tcp_stream_close, handle)
+    end
     (self :: any)._handle = nil
 end
 
